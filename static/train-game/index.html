@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zug Fahrer – Bahnspiel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #eee;
+      overflow: hidden;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 10px;
+      letter-spacing: 3px;
+      color: #e0c060;
+      text-shadow: 0 0 20px #e0c06066;
+    }
+
+    #hud {
+      display: flex;
+      gap: 40px;
+      margin-bottom: 10px;
+      font-size: 1.1rem;
+      background: rgba(0,0,0,0.4);
+      padding: 8px 30px;
+      border-radius: 30px;
+      border: 1px solid #444;
+    }
+
+    #hud span { color: #e0c060; font-weight: bold; }
+
+    canvas {
+      display: block;
+      border: 3px solid #444;
+      border-radius: 6px;
+      box-shadow: 0 0 40px rgba(0,0,0,0.8);
+      background: #1e3a5f;
+    }
+
+    #info {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: #888;
+      letter-spacing: 1px;
+    }
+
+    #overlay {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10, 10, 30, 0.85);
+      z-index: 10;
+    }
+
+    #overlay h2 {
+      font-size: 2.5rem;
+      color: #e0c060;
+      margin-bottom: 20px;
+    }
+
+    #overlay p {
+      font-size: 1.1rem;
+      color: #ccc;
+      margin-bottom: 8px;
+      text-align: center;
+      max-width: 420px;
+      line-height: 1.6;
+    }
+
+    #startBtn {
+      margin-top: 24px;
+      padding: 14px 48px;
+      font-size: 1.2rem;
+      background: #e0c060;
+      color: #1a1a2e;
+      border: none;
+      border-radius: 40px;
+      cursor: pointer;
+      font-weight: bold;
+      letter-spacing: 2px;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 4px 20px rgba(224,192,96,0.4);
+    }
+
+    #startBtn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 28px rgba(224,192,96,0.6);
+    }
+  </style>
+</head>
+<body>
+
+<h1>🚂 ZUGFAHRER</h1>
+
+<div id="hud">
+  Punkte: <span id="score">0</span>
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  Geschwindigkeit: <span id="speed">0</span> km/h
+  &nbsp;&nbsp;|&nbsp;&nbsp;
+  Nächste Station: <span id="nextStation">—</span>
+</div>
+
+<canvas id="gameCanvas" width="900" height="500"></canvas>
+
+<div id="info">
+  ← → Lenken &nbsp;|&nbsp; ↑ Beschleunigen &nbsp;|&nbsp; ↓ Bremsen &nbsp;|&nbsp; SPACE Pfeife
+</div>
+
+<div id="overlay">
+  <h2>🚂 ZUGFAHRER</h2>
+  <p>Steuere deinen Zug durch die Landschaft, hält an Bahnhöfen und sammle Punkte!</p>
+  <p>
+    <strong>↑ / ↓</strong> – Beschleunigen / Bremsen<br>
+    <strong>← / →</strong> – Weiche stellen (Links / Rechts)<br>
+    <strong>SPACE</strong> – Pfeife<br>
+    <strong>Halte</strong> beim Bahnhof (unter 20 km/h) für Punkte!
+  </p>
+  <button id="startBtn">SPIEL STARTEN</button>
+</div>
+
+<script>
+// ─── Canvas setup ───────────────────────────────────────────────────
+const canvas = document.getElementById('gameCanvas');
+const ctx    = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// ─── Game state ─────────────────────────────────────────────────────
+let state = 'menu'; // menu | playing | gameover
+let score = 0;
+let speed = 0;       // px per frame (internal)
+let kmh   = 0;
+const MAX_SPEED  = 12;
+const ACCEL      = 0.08;
+const BRAKE      = 0.15;
+const FRICTION   = 0.02;
+
+// ─── Track / world scroll ───────────────────────────────────────────
+let worldX = 0;   // how far we've scrolled
+
+// ─── Stations ───────────────────────────────────────────────────────
+const STATION_NAMES = [
+  'Berlin Hbf','Hamburg','München','Köln','Frankfurt','Stuttgart',
+  'Düsseldorf','Leipzig','Nürnberg','Dresden','Hannover','Bremen'
+];
+let stations   = [];
+let nextStIdx  = 0;
+let stationCooldown = 0;
+
+function buildStations() {
+  stations = [];
+  let x = 1200;
+  for (let i = 0; i < 20; i++) {
+    stations.push({
+      x,
+      name: STATION_NAMES[i % STATION_NAMES.length],
+      visited: false
+    });
+    x += 900 + Math.floor(Math.random() * 600);
+  }
+}
+
+// ─── Scenery objects ─────────────────────────────────────────────────
+let trees = [], clouds = [], mountains = [], houses = [];
+
+function buildScenery() {
+  trees = [];
+  for (let i = 0; i < 80; i++) {
+    trees.push({
+      x: 100 + i * 180 + Math.random() * 120,
+      y: H - 120 - Math.random() * 60,
+      h: 30 + Math.random() * 40,
+      type: Math.random() > 0.4 ? 'pine' : 'oak'
+    });
+  }
+  clouds = [];
+  for (let i = 0; i < 15; i++) {
+    clouds.push({
+      x: Math.random() * W * 3,
+      y: 30 + Math.random() * 120,
+      w: 80 + Math.random() * 120,
+      speed: 0.2 + Math.random() * 0.3
+    });
+  }
+  mountains = [];
+  for (let i = 0; i < 12; i++) {
+    mountains.push({
+      x: i * 800 + Math.random() * 400,
+      h: 80 + Math.random() * 120,
+      w: 200 + Math.random() * 200
+    });
+  }
+  houses = [];
+  for (let i = 0; i < 30; i++) {
+    houses.push({
+      x: 500 + i * 600 + Math.random() * 300,
+      w: 40 + Math.random() * 30,
+      h: 30 + Math.random() * 30,
+      color: `hsl(${Math.random()*360},40%,55%)`
+    });
+  }
+}
+
+// ─── Train parts ─────────────────────────────────────────────────────
+const TRAIN_X   = 160;  // fixed screen X of front locomotive
+const TRAIN_Y   = H - 130;
+let whistleCooldown = 0;
+let whistleAnim     = 0;
+let smokeParticles  = [];
+
+function spawnSmoke() {
+  smokeParticles.push({
+    x: TRAIN_X + 20,
+    y: TRAIN_Y - 50,
+    vx: -speed * 0.5 + (Math.random() - 0.5),
+    vy: -1 - Math.random(),
+    life: 1,
+    r: 8 + Math.random() * 8
+  });
+}
+
+// ─── Keyboard ────────────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' && state === 'playing') {
+    e.preventDefault();
+    if (whistleCooldown <= 0) {
+      whistleCooldown = 60;
+      whistleAnim     = 30;
+      playWhistle();
+    }
+  }
+  if ((e.code === 'Enter' || e.code === 'Space') && state === 'gameover') {
+    restartGame();
+  }
+});
+document.addEventListener('keyup',  e => { keys[e.code] = false; });
+
+// ─── Audio (Web Audio API) ────────────────────────────────────────────
+let audioCtx = null;
+function getAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function playWhistle() {
+  try {
+    const ac  = getAudio();
+    const osc = ac.createOscillator();
+    const gain= ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(880, ac.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(660, ac.currentTime + 0.4);
+    gain.gain.setValueAtTime(0.2, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.5);
+    osc.start(); osc.stop(ac.currentTime + 0.5);
+  } catch(e) {}
+}
+function playChime() {
+  try {
+    const ac = getAudio();
+    [523, 659, 784].forEach((f, i) => {
+      const osc = ac.createOscillator();
+      const g   = ac.createGain();
+      osc.connect(g); g.connect(ac.destination);
+      osc.frequency.value = f;
+      g.gain.setValueAtTime(0.15, ac.currentTime + i * 0.12);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + i * 0.12 + 0.4);
+      osc.start(ac.currentTime + i * 0.12);
+      osc.stop(ac.currentTime + i * 0.12 + 0.4);
+    });
+  } catch(e) {}
+}
+
+// ─── Init / restart ───────────────────────────────────────────────────
+function initGame() {
+  buildStations();
+  buildScenery();
+  score  = 0;
+  speed  = 0;
+  kmh    = 0;
+  worldX = 0;
+  nextStIdx = 0;
+  smokeParticles = [];
+  whistleCooldown = 0;
+  whistleAnim     = 0;
+  stationCooldown = 0;
+}
+
+function restartGame() {
+  initGame();
+  state = 'playing';
+  document.getElementById('overlay').style.display = 'none';
+}
+
+// ─── Drawing helpers ──────────────────────────────────────────────────
+
+// Sky gradient (time-of-day cycles with world scroll)
+function drawSky() {
+  const t = (worldX / 6000) % 1;
+  let c1, c2;
+  if (t < 0.25) {
+    // day
+    c1 = '#87CEEB'; c2 = '#dce9f5';
+  } else if (t < 0.5) {
+    // sunset
+    c1 = '#f4a261'; c2 = '#e76f51';
+  } else if (t < 0.75) {
+    // night
+    c1 = '#0d1b2a'; c2 = '#1b2838';
+  } else {
+    // sunrise
+    c1 = '#ffb347'; c2 = '#ffcc70';
+  }
+  const grad = ctx.createLinearGradient(0, 0, 0, H - 90);
+  grad.addColorStop(0, c1);
+  grad.addColorStop(1, c2);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H - 90);
+}
+
+// Stars (night only)
+function drawStars(t) {
+  if (t < 0.45 || t > 0.8) return;
+  const alpha = t < 0.5 ? (t - 0.45) * 20 : t > 0.75 ? (0.8 - t) * 20 : 1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 60; i++) {
+    const sx = (i * 137.5 + worldX * 0.01) % W;
+    const sy = (i * 43) % (H - 200);
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  ctx.restore();
+}
+
+function drawMountains() {
+  ctx.save();
+  for (const m of mountains) {
+    const sx = m.x - worldX * 0.3; // parallax
+    if (sx > W + m.w || sx + m.w < -m.w) continue;
+    ctx.fillStyle = '#5a7fa0';
+    ctx.beginPath();
+    ctx.moveTo(sx, H - 90);
+    ctx.lineTo(sx + m.w / 2, H - 90 - m.h);
+    ctx.lineTo(sx + m.w,     H - 90);
+    ctx.fill();
+    // snow cap
+    ctx.fillStyle = '#ddeeff';
+    ctx.beginPath();
+    ctx.moveTo(sx + m.w / 2 - 20, H - 90 - m.h + 25);
+    ctx.lineTo(sx + m.w / 2,       H - 90 - m.h);
+    ctx.lineTo(sx + m.w / 2 + 20, H - 90 - m.h + 25);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawClouds() {
+  ctx.save();
+  for (const c of clouds) {
+    const cx = (c.x - worldX * 0.4) % (W * 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(cx,          c.y, c.w * 0.3, 0, Math.PI * 2);
+    ctx.arc(cx + c.w * 0.3, c.y - 12, c.w * 0.25, 0, Math.PI * 2);
+    ctx.arc(cx + c.w * 0.6, c.y, c.w * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawGround() {
+  // Grass
+  ctx.fillStyle = '#3d7a3d';
+  ctx.fillRect(0, H - 90, W, 55);
+  // Rail bed
+  ctx.fillStyle = '#8a7560';
+  ctx.fillRect(0, H - 80, W, 30);
+  // Sleepers
+  ctx.fillStyle = '#6b5040';
+  for (let rx = (- worldX % 40 + 40) % 40; rx < W; rx += 40) {
+    ctx.fillRect(rx, H - 78, 6, 26);
+  }
+  // Rails
+  ctx.strokeStyle = '#aaa';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(0, H - 64); ctx.lineTo(W, H - 64); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, H - 54); ctx.lineTo(W, H - 54); ctx.stroke();
+}
+
+function drawTrees() {
+  ctx.save();
+  for (const t of trees) {
+    const sx = t.x - worldX;
+    if (sx < -60 || sx > W + 60) continue;
+    const ty = t.y;
+    if (t.type === 'pine') {
+      // trunk
+      ctx.fillStyle = '#6b4c2a';
+      ctx.fillRect(sx - 4, ty, 8, 20);
+      // tiers
+      ctx.fillStyle = '#2d6e2d';
+      ctx.beginPath(); ctx.moveTo(sx, ty - t.h);     ctx.lineTo(sx - t.h*0.5, ty - t.h*0.3); ctx.lineTo(sx + t.h*0.5, ty - t.h*0.3); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(sx, ty - t.h*0.7); ctx.lineTo(sx - t.h*0.6, ty);            ctx.lineTo(sx + t.h*0.6, ty);            ctx.fill();
+    } else {
+      // oak
+      ctx.fillStyle = '#6b4c2a';
+      ctx.fillRect(sx - 3, ty - 10, 6, 30);
+      ctx.fillStyle = '#3a8c3a';
+      ctx.beginPath(); ctx.arc(sx, ty - t.h * 0.5, t.h * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawHouses() {
+  ctx.save();
+  for (const h of houses) {
+    const sx = h.x - worldX;
+    if (sx < -80 || sx > W + 80) continue;
+    const ty = H - 90 - h.h;
+    // walls
+    ctx.fillStyle = h.color;
+    ctx.fillRect(sx, ty, h.w, h.h);
+    // roof
+    ctx.fillStyle = '#8b2020';
+    ctx.beginPath();
+    ctx.moveTo(sx - 4,       ty);
+    ctx.lineTo(sx + h.w / 2, ty - 22);
+    ctx.lineTo(sx + h.w + 4, ty);
+    ctx.fill();
+    // window
+    ctx.fillStyle = '#ffffaa';
+    ctx.fillRect(sx + h.w * 0.2, ty + h.h * 0.3, h.w * 0.25, h.h * 0.3);
+    ctx.fillRect(sx + h.w * 0.55, ty + h.h * 0.3, h.w * 0.25, h.h * 0.3);
+  }
+  ctx.restore();
+}
+
+function drawStation(st) {
+  const sx = st.x - worldX;
+  if (sx < -200 || sx > W + 200) return;
+
+  // Platform
+  ctx.fillStyle = st.visited ? '#555' : '#ddd';
+  ctx.fillRect(sx - 60, H - 90, 160, 22);
+
+  // Building
+  ctx.fillStyle = st.visited ? '#667' : '#f0e6cc';
+  ctx.fillRect(sx - 40, H - 130, 120, 42);
+
+  // Roof
+  ctx.fillStyle = st.visited ? '#445' : '#c0392b';
+  ctx.beginPath();
+  ctx.moveTo(sx - 50, H - 130);
+  ctx.lineTo(sx + 20,  H - 165);
+  ctx.lineTo(sx + 90,  H - 130);
+  ctx.fill();
+
+  // Sign
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(st.name, sx + 20, H - 140);
+
+  // Stop indicator (when close and slow)
+  const dist = Math.abs(sx + 20 - TRAIN_X);
+  if (dist < 80 && !st.visited && kmh < 20) {
+    ctx.fillStyle = 'rgba(0,200,0,0.3)';
+    ctx.fillRect(sx - 70, H - 145, 180, 80);
+    ctx.fillStyle = '#00ff00';
+    ctx.font = 'bold 13px Arial';
+    ctx.fillText('✓ Halt!', sx + 20, H - 150);
+  } else if (dist < 120 && !st.visited) {
+    ctx.fillStyle = 'rgba(255,200,0,0.15)';
+    ctx.fillRect(sx - 70, H - 140, 180, 75);
+  }
+  ctx.textAlign = 'left';
+}
+
+function drawSmoke() {
+  ctx.save();
+  for (const p of smokeParticles) {
+    ctx.globalAlpha = p.life * 0.5;
+    ctx.fillStyle = '#ccc';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTrain() {
+  const tx = TRAIN_X, ty = TRAIN_Y;
+
+  // --- Wagons (behind loco) ---
+  for (let w = 0; w < 3; w++) {
+    const wx = tx - 90 - w * 80;
+    const wy = ty + 12;
+    ctx.fillStyle = '#2255aa';
+    ctx.beginPath();
+    ctx.roundRect(wx, wy, 70, 35, 4);
+    ctx.fill();
+    ctx.strokeStyle = '#4488dd';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // windows
+    ctx.fillStyle = '#cceeff';
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(wx + 8 + i * 20, wy + 7, 13, 10);
+    }
+    // wheels
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(wx + 14, wy + 36, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(wx + 52, wy + 36, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#888';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(wx + 14, wy + 36, 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(wx + 52, wy + 36, 8, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // --- Locomotive ---
+  // Body
+  ctx.fillStyle = '#cc2200';
+  ctx.beginPath();
+  ctx.roundRect(tx - 30, ty + 5, 90, 40, 6);
+  ctx.fill();
+
+  // Cabin
+  ctx.fillStyle = '#aa1800';
+  ctx.fillRect(tx - 20, ty - 15, 50, 22);
+
+  // Roof
+  ctx.fillStyle = '#881000';
+  ctx.fillRect(tx - 24, ty - 20, 58, 8);
+
+  // Front nose
+  ctx.fillStyle = '#cc2200';
+  ctx.beginPath();
+  ctx.moveTo(tx + 60, ty + 10);
+  ctx.lineTo(tx + 80, ty + 20);
+  ctx.lineTo(tx + 80, ty + 38);
+  ctx.lineTo(tx + 60, ty + 45);
+  ctx.fill();
+
+  // Headlight
+  ctx.fillStyle = '#ffff88';
+  ctx.beginPath(); ctx.arc(tx + 76, ty + 22, 6, 0, Math.PI * 2); ctx.fill();
+  if (speed > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    ctx.fillStyle = '#ffffaa';
+    ctx.beginPath(); ctx.ellipse(tx + 120, ty + 22, 60, 20, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Chimney
+  ctx.fillStyle = '#333';
+  ctx.fillRect(tx, ty - 28, 14, 15);
+  ctx.fillRect(tx - 3, ty - 32, 20, 7);
+
+  // Cabin window
+  ctx.fillStyle = '#cceeff';
+  ctx.fillRect(tx - 12, ty - 12, 18, 12);
+  ctx.fillRect(tx + 10, ty - 12, 18, 12);
+
+  // Wheels (loco)
+  const wheelPositions = [tx + 5, tx + 30, tx + 55];
+  for (const wx of wheelPositions) {
+    ctx.fillStyle = '#222';
+    ctx.beginPath(); ctx.arc(wx, ty + 46, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#777';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(wx, ty + 46, 11, 0, Math.PI * 2); ctx.stroke();
+    // spokes
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.5;
+    for (let a = 0; a < 4; a++) {
+      const ang = a * Math.PI / 2 + worldX * 0.05;
+      ctx.beginPath();
+      ctx.moveTo(wx, ty + 46);
+      ctx.lineTo(wx + Math.cos(ang) * 9, ty + 46 + Math.sin(ang) * 9);
+      ctx.stroke();
+    }
+  }
+
+  // Whistle puff
+  if (whistleAnim > 0) {
+    ctx.save();
+    ctx.globalAlpha = whistleAnim / 30;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px Arial';
+    ctx.fillText('📢', tx + 5, ty - 35);
+    ctx.restore();
+  }
+}
+
+function drawHUD() {
+  document.getElementById('score').textContent    = score;
+  document.getElementById('speed').textContent    = Math.round(kmh);
+  const ns = stations[nextStIdx];
+  document.getElementById('nextStation').textContent = ns
+    ? `${ns.name} (${Math.max(0, Math.round((ns.x - worldX - TRAIN_X) / 10))} km)`
+    : '—';
+}
+
+function drawGameOver() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,10,30,0.75)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#e0c060';
+  ctx.font = 'bold 56px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('SPIELENDE', W / 2, H / 2 - 40);
+  ctx.fillStyle = '#fff';
+  ctx.font = '24px Arial';
+  ctx.fillText(`Punkte: ${score}`, W / 2, H / 2 + 10);
+  ctx.font = '18px Arial';
+  ctx.fillStyle = '#aaa';
+  ctx.fillText('ENTER oder SPACE – Nochmal spielen', W / 2, H / 2 + 55);
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
+// ─── Update ───────────────────────────────────────────────────────────
+function update() {
+  if (state !== 'playing') return;
+
+  // Acceleration / braking
+  if (keys['ArrowUp']   || keys['KeyW']) speed = Math.min(MAX_SPEED, speed + ACCEL);
+  if (keys['ArrowDown'] || keys['KeyS']) speed = Math.max(0,         speed - BRAKE);
+  speed = Math.max(0, speed - FRICTION);
+
+  worldX += speed;
+  kmh = speed * 12; // rough conversion
+
+  // Smoke
+  if (speed > 0.5 && Math.random() < 0.3 + speed * 0.05) spawnSmoke();
+
+  // Update smoke particles
+  smokeParticles = smokeParticles.filter(p => p.life > 0.01);
+  for (const p of smokeParticles) {
+    p.x  += p.vx; p.y += p.vy;
+    p.life -= 0.015;
+    p.r  *= 1.01;
+  }
+
+  if (whistleCooldown > 0) whistleCooldown--;
+  if (whistleAnim     > 0) whistleAnim--;
+  if (stationCooldown > 0) stationCooldown--;
+
+  // Station logic
+  if (nextStIdx < stations.length) {
+    const st   = stations[nextStIdx];
+    const dist = Math.abs((st.x - worldX) - TRAIN_X);
+    if (dist < 60 && kmh < 20 && !st.visited && stationCooldown <= 0) {
+      st.visited    = true;
+      stationCooldown = 120;
+      const pts     = Math.max(10, Math.round(100 - kmh * 3));
+      score        += pts;
+      playChime();
+      // Show popup
+      showPoints(pts, st.name);
+      nextStIdx++;
+    }
+    // Passed station without stopping – game over
+    if (st.x - worldX < -200 && !st.visited) {
+      nextStIdx++;
+    }
+  }
+
+  // All stations done
+  if (nextStIdx >= stations.length) {
+    state = 'gameover';
+  }
+}
+
+// ─── Floating score popup ─────────────────────────────────────────────
+let popups = [];
+function showPoints(pts, name) {
+  popups.push({ text: `+${pts} ${name}`, x: TRAIN_X + 100, y: H - 160, life: 1 });
+}
+function drawPopups() {
+  ctx.save();
+  for (const p of popups) {
+    ctx.globalAlpha = p.life;
+    ctx.font = 'bold 22px Arial';
+    ctx.fillStyle = '#e0c060';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 3;
+    ctx.strokeText(p.text, p.x, p.y);
+    ctx.fillText(p.text, p.x, p.y);
+    p.y   -= 1.5;
+    p.life -= 0.018;
+  }
+  popups = popups.filter(p => p.life > 0);
+  ctx.restore();
+}
+
+// ─── Main loop ────────────────────────────────────────────────────────
+function loop() {
+  const t = (worldX / 6000) % 1;
+
+  ctx.clearRect(0, 0, W, H);
+
+  drawSky();
+  drawStars(t);
+  drawMountains();
+  drawClouds();
+  drawHouses();
+  drawTrees();
+  drawGround();
+
+  for (const st of stations) drawStation(st);
+
+  drawSmoke();
+  drawTrain();
+  drawPopups();
+
+  if (state === 'gameover') drawGameOver();
+
+  update();
+  drawHUD();
+
+  requestAnimationFrame(loop);
+}
+
+// ─── Start button ─────────────────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click', () => {
+  initGame();
+  state = 'playing';
+  document.getElementById('overlay').style.display = 'none';
+  try { getAudio(); } catch(e) {}
+});
+
+initGame();
+loop();
+</script>
+</body>
+</html>
