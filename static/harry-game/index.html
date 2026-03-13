@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Harry macht Ärger!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh;
+      font-family: 'Comic Sans MS', 'Chalkboard SE', Arial, sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: 2rem; color: #f1c40f;
+      text-shadow: 3px 3px 0 #c0392b, 5px 5px 10px rgba(0,0,0,0.5);
+      margin-bottom: 8px; letter-spacing: 2px;
+    }
+    #hud {
+      display: flex; gap: 18px; margin-bottom: 8px;
+      font-size: 1.05rem; background: rgba(0,0,0,0.6);
+      padding: 6px 20px; border-radius: 30px;
+      border: 2px solid #f1c40f; color: #fff;
+    }
+    #hud span { color: #f1c40f; font-weight: bold; }
+    #wrap { position: relative; }
+    canvas {
+      display: block; border: 4px solid #f1c40f;
+      border-radius: 8px;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.5), 0 0 30px rgba(241,196,15,0.3);
+    }
+    #overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(5,5,20,0.87); border-radius: 6px; z-index: 10;
+    }
+    .card {
+      background: rgba(255,248,220,0.97);
+      border: 5px solid #f1c40f; border-radius: 20px;
+      padding: 28px 46px; text-align: center;
+      box-shadow: 0 8px 0 #b7860d, 0 14px 30px rgba(0,0,0,0.4);
+      max-width: 460px;
+    }
+    .card h2 { font-size: 2.2rem; color: #c0392b; margin-bottom: 10px; }
+    .card p  { font-size: 1rem; color: #555; line-height: 1.8; }
+    .card .big { font-size: 1.8rem; color: #f1c40f; font-weight: bold; margin: 12px 0; }
+    #startBtn {
+      margin-top: 18px; padding: 13px 46px; font-size: 1.2rem;
+      background: #c0392b; color: #fff; border: none; border-radius: 50px;
+      cursor: pointer; font-family: inherit; font-weight: bold;
+      letter-spacing: 2px; box-shadow: 0 5px 0 #922b21;
+      transition: transform .1s, box-shadow .1s;
+    }
+    #startBtn:hover { transform: scale(1.06); }
+    #startBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #922b21; }
+    #controls {
+      display: none; grid-template-columns: repeat(4,58px);
+      gap: 6px; margin-top: 10px;
+    }
+    @media (pointer: coarse) { #controls { display: grid; } }
+    .cbtn {
+      height: 58px; background: rgba(241,196,15,0.15);
+      border: 2px solid #f1c40f; border-radius: 10px;
+      color: #f1c40f; font-size: 1.5rem; cursor: pointer; touch-action: manipulation;
+    }
+    .cbtn:active { background: rgba(241,196,15,0.4); }
+    #msg {
+      position: absolute; bottom: 14px; left: 0; right: 0;
+      text-align: center; font-size: 1.1rem; font-weight: bold;
+      color: #fff; text-shadow: 2px 2px 4px #000;
+      pointer-events: none; z-index: 5;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🔨 HARRY MACHT ÄRGER!</h1>
+<div id="hud">
+  Schäden: <span id="score">0</span>
+  &nbsp;|&nbsp;
+  Schläge: <span id="hits">0</span>
+  &nbsp;|&nbsp;
+  <span id="phase">🔨 Mach das Flugzeug kaputt!</span>
+</div>
+
+<div id="wrap">
+  <canvas id="c" width="780" height="420"></canvas>
+  <div id="msg"></div>
+  <div id="overlay">
+    <div class="card">
+      <h2>🔨 HARRY MACHT ÄRGER!</h2>
+      <p>
+        Harry hat einen <strong>Hammer</strong> gefunden!<br>
+        Mach das <strong>✈️ Flugzeug</strong> kaputt –<br>
+        aber dann kommt die <strong>🚓 Polizei!</strong>
+      </p>
+      <p style="margin-top:8px">
+        <strong>← →</strong> Laufen &nbsp;|&nbsp;
+        <strong>↑ / W</strong> Springen<br>
+        <strong>SPACE / Z</strong> Hammer schwingen!
+      </p>
+      <div class="big" id="oScore" style="display:none"></div>
+      <button id="startBtn">🚀 LOS!</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button class="cbtn" id="cLeft">⬅️</button>
+  <button class="cbtn" id="cRight">➡️</button>
+  <button class="cbtn" id="cJump">⬆️</button>
+  <button class="cbtn" id="cHit">🔨</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const GROUND = H - 56;
+const GRAVITY = 0.55;
+const JUMP_V  = -13;
+const MOVE_SPD = 4;
+
+// ── Phases ────────────────────────────────────────────────────────────
+// smash → alarm → police_drive → police_walk → take_hammer → arrested → end
+let phase, frameN, shakeX=0, shakeY=0;
+
+// ── Objects ───────────────────────────────────────────────────────────
+let harry, plane, policeCar, policeOfficer;
+let particles, popups, smokes, sparks;
+let score, hits, sirenFlash, arrestMsg;
+let msgText = '';
+
+function setMsg(t) {
+  msgText = t;
+  document.getElementById('msg').textContent = t;
+}
+
+function init() {
+  phase  = 'smash';
+  frameN = 0;
+  score  = 0;
+  hits   = 0;
+  sirenFlash = 0;
+  arrestMsg  = '';
+  particles  = [];
+  popups     = [];
+  smokes     = [];
+  sparks     = [];
+
+  harry = {
+    x: 120, y: GROUND - 68, w: 32, h: 68,
+    vx: 0, vy: 0, onGround: false, facing: 1,
+    swinging: false, swingTimer: 0, hitCooldown: 0,
+    walkFrame: 0, walkTimer: 0,
+    hasHammer: true,
+    // for arrest animation
+    handRaisedTimer: 0
+  };
+
+  plane = {
+    x: W - 280, y: GROUND - 110,
+    w: 280, h: 100,
+    hp: 14, maxHp: 14,
+    hitFlash: 0,
+    damage: [],   // array of damage positions
+    smoke: false,
+    fire: false,
+    broken: false,
+    // pieces that fell off
+    pieces: []
+  };
+
+  policeCar = {
+    x: W + 200, y: GROUND - 52,
+    vx: -3.5, stopped: false, stopX: W - 160,
+    sirenTimer: 0,
+    doorOpen: false, doorAngle: 0
+  };
+
+  policeOfficer = {
+    x: W + 300, y: GROUND - 62,
+    vx: 0, active: false,
+    walking: false, walkFrame: 0, walkTimer: 0,
+    reached: false, grabTimer: 0,
+    facingLeft: true
+  };
+
+  updateHUD();
+  setMsg('🔨 Schwing den Hammer! (SPACE oder Z)');
+}
+
+// ── Input ─────────────────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['Space','ArrowLeft','ArrowRight','ArrowUp'].includes(e.code)) e.preventDefault();
+  if ((e.code==='Space'||e.code==='KeyZ') && (phase==='smash'||phase==='alarm')) doSwing();
+  if ((e.code==='ArrowUp'||e.code==='KeyW') && phase==='smash') doJump();
+  if (e.code==='Enter' && phase==='end') startGame();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+document.getElementById('cLeft').addEventListener('touchstart',  e=>{e.preventDefault();keys['ArrowLeft']=true;});
+document.getElementById('cLeft').addEventListener('touchend',    ()=>{keys['ArrowLeft']=false;});
+document.getElementById('cRight').addEventListener('touchstart', e=>{e.preventDefault();keys['ArrowRight']=true;});
+document.getElementById('cRight').addEventListener('touchend',   ()=>{keys['ArrowRight']=false;});
+document.getElementById('cJump').addEventListener('touchstart',  e=>{e.preventDefault();doJump();});
+document.getElementById('cHit').addEventListener('touchstart',   e=>{e.preventDefault();doSwing();});
+document.getElementById('cLeft').addEventListener('click',  ()=>{keys['ArrowLeft']=true;setTimeout(()=>keys['ArrowLeft']=false,150);});
+document.getElementById('cRight').addEventListener('click', ()=>{keys['ArrowRight']=true;setTimeout(()=>keys['ArrowRight']=false,150);});
+document.getElementById('cJump').addEventListener('click',  doJump);
+document.getElementById('cHit').addEventListener('click',   doSwing);
+
+function doJump() { if (harry.onGround && phase==='smash') { harry.vy=JUMP_V; harry.onGround=false; snd('jump'); } }
+function doSwing() {
+  if (!harry.swinging && harry.hasHammer) {
+    harry.swinging=true; harry.swingTimer=0; snd('swing');
+  }
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────
+let ac;
+function getAC(){ if(!ac) ac=new(window.AudioContext||window.webkitAudioContext)(); return ac; }
+function snd(t){
+  try {
+    const a=getAC();
+    if(t==='swing'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sawtooth';o.frequency.setValueAtTime(280,a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(90,a.currentTime+0.12);
+      g.gain.setValueAtTime(0.15,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.15);
+      o.start();o.stop(a.currentTime+0.15);
+    } else if(t==='smash'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='square';o.frequency.setValueAtTime(220,a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(55,a.currentTime+0.22);
+      g.gain.setValueAtTime(0.4,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.28);
+      o.start();o.stop(a.currentTime+0.28);
+      const b=a.createBuffer(1,a.sampleRate*0.15,a.sampleRate);
+      const d=b.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length)*0.5;
+      const s=a.createBufferSource(),g2=a.createGain();
+      s.buffer=b;s.connect(g2);g2.connect(a.destination);g2.gain.value=0.5;s.start();
+    } else if(t==='siren'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sawtooth';
+      o.frequency.setValueAtTime(600,a.currentTime);
+      o.frequency.setValueAtTime(800,a.currentTime+0.2);
+      o.frequency.setValueAtTime(600,a.currentTime+0.4);
+      g.gain.setValueAtTime(0.15,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.5);
+      o.start();o.stop(a.currentTime+0.5);
+    } else if(t==='jump'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';o.frequency.setValueAtTime(350,a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(700,a.currentTime+0.18);
+      g.gain.setValueAtTime(0.09,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.2);
+      o.start();o.stop(a.currentTime+0.2);
+    } else if(t==='whistle'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';o.frequency.setValueAtTime(1200,a.currentTime);
+      o.frequency.setValueAtTime(900,a.currentTime+0.15);
+      o.frequency.setValueAtTime(1200,a.currentTime+0.3);
+      g.gain.setValueAtTime(0.18,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.4);
+      o.start();o.stop(a.currentTime+0.4);
+    } else if(t==='take'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';[440,330,220,160].forEach((f,i)=>{
+        o.frequency.setValueAtTime(f,a.currentTime+i*0.1);
+      });
+      g.gain.setValueAtTime(0.18,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.5);
+      o.start();o.stop(a.currentTime+0.5);
+    }
+  } catch(e){}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function rand(a,b){ return a+Math.random()*(b-a); }
+function burst(x,y,colors,n=14){
+  for(let i=0;i<n;i++){
+    const a=rand(0,Math.PI*2),s=rand(2,6);
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(1,4),
+                    life:1,color:colors[Math.floor(Math.random()*colors.length)],r:rand(3,8)});
+  }
+}
+function addPopup(text,x,y,color='#f1c40f'){
+  popups.push({text,x,y,vy:-2,life:1,color});
+}
+function screenShake(amt=8){ shakeX=rand(-amt,amt); shakeY=rand(-amt,amt); }
+
+// ── Update ────────────────────────────────────────────────────────────
+function update(){
+  frameN++;
+  shakeX*=0.7; shakeY*=0.7;
+
+  // Siren flash
+  if(phase!=='smash') sirenFlash=(sirenFlash+1)%20;
+
+  // Smoke from plane
+  if(plane.smoke && frameN%4===0){
+    smokes.push({x:plane.x+plane.w*0.35+rand(-20,20), y:plane.y+rand(-10,10),
+                 vx:rand(-0.5,0.5), vy:-rand(0.5,1.5),
+                 life:1, r:rand(8,18), color: plane.fire?'#ff6600':'#666'});
+  }
+
+  smokes.forEach(s=>{ s.x+=s.vx;s.y+=s.vy;s.life-=0.02;s.r*=1.01; });
+  smokes=smokes.filter(s=>s.life>0);
+
+  if(phase==='smash' || phase==='alarm'){
+    // Harry movement
+    if(keys['ArrowLeft']||keys['KeyA']){ harry.vx=-MOVE_SPD; harry.facing=-1; }
+    else if(keys['ArrowRight']||keys['KeyD']){ harry.vx=MOVE_SPD; harry.facing=1; }
+    else harry.vx*=0.7;
+
+    harry.vy+=GRAVITY;
+    harry.x+=harry.vx;
+    harry.y+=harry.vy;
+
+    if(harry.y>=GROUND-harry.h){ harry.y=GROUND-harry.h; harry.vy=0; harry.onGround=true; }
+    else harry.onGround=false;
+
+    harry.x=Math.max(10, Math.min(W-40, harry.x));
+
+    if(Math.abs(harry.vx)>0.4 && harry.onGround){
+      harry.walkTimer++;
+      if(harry.walkTimer>8){harry.walkFrame=(harry.walkFrame+1)%4;harry.walkTimer=0;}
+    }
+
+    if(harry.swinging){
+      harry.swingTimer++;
+      if(harry.swingTimer>18){ harry.swinging=false; harry.swingTimer=0; }
+    }
+    if(harry.hitCooldown>0) harry.hitCooldown--;
+
+    // Hammer hits plane
+    if(harry.swinging && harry.swingTimer<14 && plane.hp>0){
+      const hamX = harry.x + harry.facing * 44;
+      const hamY = harry.y + harry.h*0.2;
+      if(hamX>plane.x-20 && hamX<plane.x+plane.w+20 &&
+         hamY>plane.y-20 && hamY<plane.y+plane.h+20){
+        if(harry.hitCooldown<=0){
+          plane.hp--;
+          plane.hitFlash=12;
+          harry.hitCooldown=14;
+          screenShake(7);
+          snd('smash');
+
+          // Damage record
+          const dPct = 1 - plane.hp/plane.maxHp;
+          plane.damage.push({
+            x: rand(plane.x+30, plane.x+plane.w-30),
+            y: rand(plane.y+10, plane.y+plane.h-10),
+            type: dPct > 0.6 ? 'hole' : 'dent',
+            r: rand(6,18)
+          });
+
+          burst(hamX, hamY, ['#aaa','#fff','#ccc','#f39c12'], 16);
+          addPopup('💥 BÄNG!', hamX, hamY-30, '#f1c40f');
+          score += 10;
+          hits++;
+
+          // Fire starts at 50% damage
+          if(plane.hp <= plane.maxHp*0.5) plane.smoke = true;
+          if(plane.hp <= plane.maxHp*0.3) plane.fire  = true;
+
+          // Piece falls off
+          if(plane.hp % 3 === 0){
+            plane.pieces.push({
+              x: rand(plane.x+40,plane.x+plane.w-40),
+              y: plane.y + rand(0,plane.h),
+              vx: rand(-3,3), vy: rand(-4,-1),
+              r: rand(10,28), angle:0, spin:rand(-0.1,0.1),
+              life:1, color:'#888'
+            });
+          }
+
+          updateHUD();
+
+          if(plane.hp<=0 && phase==='smash'){
+            plane.broken=true;
+            plane.smoke=true; plane.fire=true;
+            burst(plane.x+plane.w/2, plane.y+plane.h/2, ['#ff6600','#ff0000','#ffcc00','#888'], 40);
+            screenShake(15);
+            phase='alarm';
+            setMsg('⚠️ ALARM! Die Polizei kommt!');
+            setTimeout(startPolice, 2000);
+          }
+        }
+      }
+    }
+  }
+
+  // Pieces fall
+  plane.pieces.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.25;
+    p.angle+=p.spin;
+    if(p.y>GROUND){ p.y=GROUND; p.vy*=-0.3; p.vx*=0.8; }
+    p.life-=0.003;
+  });
+  plane.pieces=plane.pieces.filter(p=>p.life>0);
+  if(plane.hitFlash>0) plane.hitFlash--;
+
+  // Police car drives in
+  if(phase==='police_drive'){
+    if(!policeCar.stopped){
+      policeCar.x += policeCar.vx;
+      policeCar.sirenTimer++;
+      if(policeCar.sirenTimer%40===0) snd('siren');
+      if(policeCar.x <= policeCar.stopX){
+        policeCar.x = policeCar.stopX;
+        policeCar.stopped = true;
+        // Open door after 0.5s
+        setTimeout(()=>{
+          policeCar.doorOpen=true;
+          phase='police_walk';
+          policeOfficer.x = policeCar.x + 15;
+          policeOfficer.y = GROUND - 72;
+          policeOfficer.active=true;
+          policeOfficer.walking=true;
+          policeOfficer.vx=-2.2;
+          snd('whistle');
+          setMsg('🚓 HALT! STEHENBLEIBEN!');
+          addPopup('🚨 HALT! POLIZEI!', W/2, H/2-60, '#e74c3c');
+        }, 500);
+      }
+    }
+    // Siren flash
+    if(policeCar.doorOpen && policeCar.doorAngle<80){
+      policeCar.doorAngle+=4;
+    }
+  }
+
+  // Officer walks to Harry
+  if(phase==='police_walk' && policeOfficer.active){
+    if(!policeOfficer.reached){
+      policeOfficer.x += policeOfficer.vx;
+      policeOfficer.walkTimer++;
+      if(policeOfficer.walkTimer>8){policeOfficer.walkFrame=(policeOfficer.walkFrame+1)%4;policeOfficer.walkTimer=0;}
+
+      // Harry backs away (scared)
+      if(harry.x > 60) harry.x -= 1.5;
+      harry.facing=-1;
+
+      // Reached Harry
+      if(Math.abs(policeOfficer.x - harry.x) < 50){
+        policeOfficer.reached=true;
+        policeOfficer.walking=false;
+        policeOfficer.grabTimer=0;
+        phase='take_hammer';
+        setMsg('🚓 GIB DEN HAMMER HER!');
+        snd('whistle');
+      }
+    }
+  }
+
+  // Officer takes hammer
+  if(phase==='take_hammer'){
+    policeOfficer.grabTimer++;
+    harry.handRaisedTimer++;
+    if(policeOfficer.grabTimer===60){
+      snd('take');
+      harry.hasHammer=false;
+      burst(harry.x+harry.facing*30, harry.y+harry.h*0.2, ['#c0392b','#e74c3c','#fff'], 20);
+      addPopup('HAMMER WEG!', harry.x, harry.y-40, '#e74c3c');
+      setMsg('😱 HARRY HAT KEINEN HAMMER MEHR!');
+    }
+    if(policeOfficer.grabTimer===120){
+      phase='arrested';
+      setMsg('👮 Du kommst mit! Schäm dich, Harry!');
+      addPopup('🚨 VERHAFTET!', W/2, H/2-50, '#e74c3c');
+    }
+  }
+
+  // Officer walks Harry to car
+  if(phase==='arrested'){
+    // Harry and officer move to car together
+    if(harry.x < policeCar.x - 60){
+      harry.x         += 1.5;
+      policeOfficer.x += 1.5;
+      policeOfficer.walking=true;
+      harry.facing=1; policeOfficer.facingLeft=false;
+    } else {
+      phase='end';
+      setTimeout(showEnd, 800);
+    }
+  }
+
+  // Particles & popups
+  particles.forEach(p=>{ p.x+=p.vx;p.y+=p.vy;p.vy+=0.12;p.life-=0.03; });
+  particles=particles.filter(p=>p.life>0);
+  popups.forEach(p=>{ p.y+=p.vy;p.life-=0.022; });
+  popups=popups.filter(p=>p.life>0);
+}
+
+function startPolice(){
+  phase='police_drive';
+  policeCar.x = W+220;
+  snd('siren');
+  setMsg('🚨 BLAULICHT! DIE POLIZEI!');
+}
+
+function showEnd(){
+  document.getElementById('oScore').style.display='block';
+  document.getElementById('oScore').textContent=`💥 ${hits} Hammerschläge · 🏆 ${score} Punkte`;
+  document.getElementById('startBtn').textContent='🔨 Nochmal!';
+  document.getElementById('overlay').querySelector('h2').textContent='👮 HARRY WIRD VERHAFTET!';
+  document.getElementById('overlay').querySelector('p').innerHTML=
+    'Harry hat das Flugzeug <strong>kaputt gemacht</strong>...<br>die Polizei hat den <strong>Hammer mitgenommen</strong>!<br>🚔 Das war keine gute Idee, Harry!';
+  document.getElementById('overlay').style.display='flex';
+}
+
+function startGame(){
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('oScore').style.display='none';
+  document.getElementById('startBtn').textContent='🚀 LOS!';
+  document.getElementById('overlay').querySelector('h2').textContent='🔨 HARRY MACHT ÄRGER!';
+  setMsg('');
+  init();
+  try{getAC();}catch(e){}
+}
+
+function updateHUD(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('hits').textContent=hits;
+  const phaseLabels={
+    smash:'🔨 Mach das Flugzeug kaputt!',
+    alarm:'⚠️ Alarm! Lauf!',
+    police_drive:'🚨 Die Polizei kommt!',
+    police_walk:'👮 STEHENBLEIBEN!',
+    take_hammer:'😱 Der Hammer wird weggenommen!',
+    arrested:'🚔 Harry wird verhaftet...',
+    end:'👮 VERHAFTET!'
+  };
+  document.getElementById('phase').textContent=phaseLabels[phase]||'';
+}
+
+// ── Drawing ────────────────────────────────────────────────────────────
+
+function drawBg(){
+  // Sky
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#87CEEB'); g.addColorStop(1,'#dce9f5');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  // Airport building
+  ctx.fillStyle='#bdc3c7';
+  ctx.fillRect(30, GROUND-120, 180, 120);
+  ctx.fillStyle='#95a5a6';
+  ctx.fillRect(30, GROUND-125, 180, 10);
+  // Windows
+  ctx.fillStyle='#85c1e9';
+  for(let r=0;r<3;r++) for(let c=0;c<4;c++)
+    ctx.fillRect(45+c*40, GROUND-115+r*35, 25, 22);
+  // Door
+  ctx.fillStyle='#7f8c8d';
+  ctx.fillRect(98, GROUND-48, 32, 48);
+  // Sign
+  ctx.fillStyle='#2c3e50';
+  ctx.font='bold 11px Arial'; ctx.textAlign='center';
+  ctx.fillText('✈ FLUGHAFEN', 120, GROUND-130);
+
+  // Control tower
+  ctx.fillStyle='#aaa';
+  ctx.fillRect(250, GROUND-200, 30, 200);
+  ctx.fillStyle='#888';
+  ctx.beginPath(); ctx.arc(265, GROUND-205, 24, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle='#85c1e9';
+  ctx.beginPath(); ctx.arc(265, GROUND-205, 18, 0, Math.PI*2); ctx.fill();
+
+  // Runway
+  ctx.fillStyle='#555';
+  ctx.fillRect(0, GROUND-4, W, 8);
+  ctx.fillStyle='#f1c40f';
+  ctx.setLineDash([30,20]);
+  ctx.strokeStyle='#f1c40f'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(0,GROUND); ctx.lineTo(W,GROUND); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ground
+  ctx.fillStyle='#5a8a3a';
+  ctx.fillRect(0,GROUND,W,H-GROUND);
+  ctx.fillStyle='#3d6e26';
+  ctx.fillRect(0,GROUND,W,10);
+}
+
+function drawPlane(){
+  const p=plane;
+  const px=p.x, py=p.y;
+  ctx.save();
+  if(p.hitFlash>0 && Math.floor(p.hitFlash/3)%2===0){
+    ctx.filter='brightness(3)';
+  }
+
+  // Fuselage
+  const dmgColor = p.hp < p.maxHp*0.3 ? '#8B0000' : p.hp < p.maxHp*0.6 ? '#cc6600' : '#e8e8e8';
+  ctx.fillStyle=dmgColor;
+  ctx.beginPath();
+  ctx.ellipse(px+p.w*0.42, py+p.h*0.5, p.w*0.45, p.h*0.32, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Nose
+  ctx.fillStyle='#ccc';
+  ctx.beginPath();
+  ctx.moveTo(px+p.w, py+p.h*0.5);
+  ctx.quadraticCurveTo(px+p.w+40, py+p.h*0.5, px+p.w+50, py+p.h*0.5);
+  ctx.lineTo(px+p.w, py+p.h*0.38);
+  ctx.closePath();
+  ctx.fill();
+
+  // Main wing
+  ctx.fillStyle='#bbb';
+  ctx.beginPath();
+  ctx.moveTo(px+p.w*0.5, py+p.h*0.35);
+  ctx.lineTo(px+p.w*0.2, py-30);
+  ctx.lineTo(px+p.w*0.15, py-30);
+  ctx.lineTo(px+p.w*0.35, py+p.h*0.35);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(px+p.w*0.5, py+p.h*0.65);
+  ctx.lineTo(px+p.w*0.2, py+p.h+25);
+  ctx.lineTo(px+p.w*0.15, py+p.h+25);
+  ctx.lineTo(px+p.w*0.35, py+p.h*0.65);
+  ctx.fill();
+
+  // Tail fin
+  ctx.fillStyle='#aaa';
+  ctx.beginPath();
+  ctx.moveTo(px+30, py+p.h*0.2);
+  ctx.lineTo(px+5,  py-40);
+  ctx.lineTo(px,    py-40);
+  ctx.lineTo(px,    py+p.h*0.2);
+  ctx.fill();
+
+  // Tail wing
+  ctx.beginPath();
+  ctx.moveTo(px+40, py+p.h*0.4);
+  ctx.lineTo(px+10, py+p.h*0.1);
+  ctx.lineTo(px,    py+p.h*0.1);
+  ctx.lineTo(px+15, py+p.h*0.4);
+  ctx.fill();
+
+  // Engines
+  [[p.w*0.4, -28],[p.w*0.4, p.h+18]].forEach(([ex,ey])=>{
+    ctx.fillStyle='#777';
+    ctx.beginPath(); ctx.ellipse(px+ex, py+ey, 22, 9, 0, 0, Math.PI*2); ctx.fill();
+  });
+
+  // Windows
+  ctx.fillStyle='#85c1e9';
+  for(let i=0;i<5;i++){
+    const wx=px+p.w*0.35+i*28, wy=py+p.h*0.28;
+    ctx.beginPath(); ctx.ellipse(wx,wy,7,5,0,0,Math.PI*2); ctx.fill();
+  }
+
+  // Damage marks
+  ctx.filter='none';
+  for(const d of p.damage){
+    if(d.type==='hole'){
+      ctx.fillStyle='rgba(0,0,0,0.8)';
+      ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#333'; ctx.lineWidth=1.5;
+      ctx.stroke();
+      // Crack lines
+      for(let c=0;c<4;c++){
+        const ca=rand(0,Math.PI*2);
+        ctx.strokeStyle='#444'; ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.moveTo(d.x,d.y);
+        ctx.lineTo(d.x+Math.cos(ca)*(d.r+rand(4,12)), d.y+Math.sin(ca)*(d.r+rand(4,12)));
+        ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle='rgba(80,40,0,0.5)';
+      ctx.beginPath(); ctx.ellipse(d.x,d.y,d.r,d.r*0.5,rand(0,Math.PI),0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  // Fire
+  if(p.fire){
+    const fx=px+p.w*0.35, fy=py+p.h*0.4;
+    ctx.font=`${28+Math.sin(frameN*0.2)*4}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🔥',fx,fy);
+    ctx.fillText('🔥',fx+40,fy-10);
+  }
+
+  ctx.restore();
+}
+
+// Draw fallen pieces
+function drawPieces(){
+  for(const p of plane.pieces){
+    ctx.save();
+    ctx.translate(p.x,p.y); ctx.rotate(p.angle);
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle='#888';
+    ctx.beginPath();
+    ctx.moveTo(-p.r/2,-p.r/3);
+    ctx.lineTo(p.r*0.6,-p.r/4);
+    ctx.lineTo(p.r*0.3,p.r/3);
+    ctx.lineTo(-p.r*0.5,p.r/4);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle='#555'; ctx.lineWidth=1; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawSmoke(){
+  ctx.save();
+  for(const s of smokes){
+    ctx.globalAlpha=s.life*0.5;
+    const g2=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r);
+    g2.addColorStop(0,s.color);
+    g2.addColorStop(1,'transparent');
+    ctx.fillStyle=g2;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawHealthBar(){
+  if(plane.broken || plane.hp<=0) return;
+  const bx=plane.x, by=plane.y-28, bw=plane.w, bh=12;
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,6); ctx.fill();
+  const pct=plane.hp/plane.maxHp;
+  const col=pct>0.6?'#2ecc71':pct>0.3?'#f39c12':'#e74c3c';
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.roundRect(bx+1,by+1,Math.max(0,(bw-2)*pct),bh-2,5); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 9px Arial'; ctx.textAlign='center';
+  ctx.fillText(`✈️ ${plane.hp}/${plane.maxHp}`,bx+bw/2,by+9);
+}
+
+function drawPoliceCar(){
+  const car=policeCar;
+  const cx=car.x, cy=GROUND-52;
+  ctx.save();
+
+  // Siren lights (flashing)
+  const flash=sirenFlash<10;
+  ctx.shadowBlur=flash?20:0;
+  ctx.shadowColor=flash?'#e74c3c':'#3498db';
+  ctx.fillStyle=flash?'#e74c3c':'#3498db';
+  ctx.fillRect(cx+30, cy-18, 22, 12);
+  ctx.fillStyle=flash?'#3498db':'#e74c3c';
+  ctx.fillRect(cx+55, cy-18, 22, 12);
+  ctx.shadowBlur=0;
+
+  // Car body
+  ctx.fillStyle='#ecf0f1';
+  ctx.beginPath(); ctx.roundRect(cx+8, cy-6, 100, 42, 6); ctx.fill();
+  // Roof/cabin
+  ctx.fillStyle='#ddd';
+  ctx.beginPath(); ctx.roundRect(cx+22, cy-20, 65, 18, 5); ctx.fill();
+  // Police stripe
+  ctx.fillStyle='#2c3e50';
+  ctx.fillRect(cx+8, cy+8, 100, 10);
+  // POLIZEI text
+  ctx.fillStyle='#f1c40f'; ctx.font='bold 8px Arial'; ctx.textAlign='left';
+  ctx.fillText('POLIZEI', cx+28, cy+17);
+  // Windows
+  ctx.fillStyle='#85c1e9';
+  ctx.fillRect(cx+26, cy-18, 26, 13);
+  ctx.fillRect(cx+58, cy-18, 26, 13);
+  // Wheels
+  [[cx+24,cy+38],[cx+88,cy+38]].forEach(([wx,wy])=>{
+    ctx.fillStyle='#222';
+    ctx.beginPath(); ctx.arc(wx,wy,14,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#777';
+    ctx.beginPath(); ctx.arc(wx,wy,6,0,Math.PI*2); ctx.fill();
+  });
+  // Door (opening)
+  if(car.doorOpen && car.doorAngle>0){
+    ctx.save();
+    ctx.translate(cx+22, cy+6);
+    ctx.rotate(-car.doorAngle*Math.PI/180);
+    ctx.fillStyle='#ddd';
+    ctx.strokeStyle='#bbb'; ctx.lineWidth=1.5;
+    ctx.fillRect(-2,0,22,30); ctx.strokeRect(-2,0,22,30);
+    ctx.restore();
+  }
+  // Number plate
+  ctx.fillStyle='#f1c40f'; ctx.strokeStyle='#888'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.roundRect(cx+42,cy+32,32,12,2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#000'; ctx.font='bold 8px Arial'; ctx.textAlign='center';
+  ctx.fillText('POL-1Z1', cx+58, cy+41);
+
+  ctx.restore();
+}
+
+// Draw police officer (stick figure with uniform hat)
+function drawOfficer(o){
+  if(!o.active) return;
+  const x=o.x, y=o.y;
+  const h=72, f=o.facingLeft?-1:1;
+  ctx.save();
+  ctx.translate(x,y);
+
+  // Walk bob
+  const bob=o.walking? Math.sin(o.walkFrame*Math.PI/2)*3:0;
+  const legA=o.walking? Math.sin(o.walkFrame*Math.PI/2)*0.35:0;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(0,h,14,5,0,0,Math.PI*2); ctx.fill();
+
+  // Legs
+  ctx.strokeStyle='#2c3e50'; ctx.lineWidth=5; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(0,h*0.6); ctx.lineTo(-7-Math.sin(legA)*12,h+bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,h*0.6); ctx.lineTo(7+Math.sin(legA)*12,h+bob); ctx.stroke();
+
+  // Body (blue uniform)
+  ctx.strokeStyle='#1a5276'; ctx.lineWidth=6;
+  ctx.beginPath(); ctx.moveTo(0,h*0.15); ctx.lineTo(0,h*0.6); ctx.stroke();
+
+  // Uniform badge
+  ctx.fillStyle='#f1c40f';
+  ctx.beginPath(); ctx.arc(f*3, h*0.3, 4, 0, Math.PI*2); ctx.fill();
+
+  // Arm (raised with whistle OR holding hammer)
+  ctx.save();
+  ctx.translate(f*4, h*0.28);
+  ctx.scale(f,1);
+  const armAngle = o.reached ? -Math.PI*0.6 : -0.3;
+  ctx.strokeStyle='#1a5276'; ctx.lineWidth=5;
+  ctx.beginPath();
+  ctx.moveTo(0,0);
+  ctx.lineTo(Math.cos(armAngle)*22, Math.sin(armAngle)*22);
+  ctx.stroke();
+
+  // If officer has hammer (after taking it)
+  if(!harry.hasHammer && o.reached){
+    const hx=Math.cos(armAngle)*22, hy=Math.sin(armAngle)*22;
+    // Hammer stick
+    ctx.strokeStyle='#8B6914'; ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(hx, hy-16); ctx.lineTo(hx, hy+16); ctx.stroke();
+    ctx.fillStyle='#c0392b';
+    ctx.fillRect(hx-7, hy-19, 16, 10);
+  } else if(o.reached){
+    // Whistle gesture
+    const hx=Math.cos(armAngle)*22, hy=Math.sin(armAngle)*22;
+    ctx.font='16px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('📢', hx, hy);
+  }
+  ctx.restore();
+
+  // Other arm
+  ctx.strokeStyle='#1a5276'; ctx.lineWidth=5;
+  ctx.beginPath();
+  ctx.moveTo(-f*4, h*0.28);
+  ctx.lineTo(-f*14, h*0.46+Math.sin(legA)*4);
+  ctx.stroke();
+
+  // Head
+  ctx.fillStyle='#FDBCB4'; ctx.strokeStyle='#c9956b'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,h*0.09,12,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  // Eyes
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(f*3.5,h*0.08,2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(f*3.5-7,h*0.08,2,0,Math.PI*2); ctx.fill();
+  // Moustache
+  ctx.strokeStyle='#555'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-5,h*0.11); ctx.quadraticCurveTo(0,h*0.13,5,h*0.11); ctx.stroke();
+
+  // Police hat
+  ctx.fillStyle='#1a3252';
+  ctx.fillRect(-14, h*0.04-14, 28, 7);
+  ctx.fillRect(-10, h*0.04-20, 20, 8);
+  ctx.fillStyle='#f1c40f';
+  ctx.fillRect(-7, h*0.04-14, 14, 3);
+  // Badge on hat
+  ctx.fillStyle='#f1c40f';
+  ctx.beginPath(); ctx.arc(0,h*0.04-16,3,0,Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+// Draw Harry
+function drawHarry(){
+  const h2=harry;
+  const x=h2.x, y=h2.y, h=h2.h, f=h2.facing;
+  ctx.save();
+  ctx.translate(x,y);
+
+  // Flash
+  if(h2.flashTimer>0) ctx.globalAlpha=0.4;
+
+  const bob=h2.onGround ? Math.sin(h2.walkFrame*Math.PI/2)*3 : 0;
+  const legA=h2.onGround ? Math.sin(h2.walkFrame*Math.PI/2)*0.35 : 0;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(0,h,14,5,0,0,Math.PI*2); ctx.fill();
+
+  // Scared pose during arrest
+  const scared = (phase==='take_hammer'||phase==='arrested');
+
+  // Legs
+  ctx.strokeStyle='#2c3e50'; ctx.lineWidth=5; ctx.lineCap='round';
+  const legSpread = scared ? 0.3 : 0;
+  ctx.beginPath(); ctx.moveTo(0,h*0.6); ctx.lineTo(-8-Math.sin(legA+legSpread)*14,h+bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,h*0.6); ctx.lineTo(8+Math.sin(legA-legSpread)*14,h+bob); ctx.stroke();
+
+  // Body
+  ctx.strokeStyle='#e67e22'; ctx.lineWidth=6;
+  ctx.beginPath(); ctx.moveTo(0,h*0.15); ctx.lineTo(0,h*0.6); ctx.stroke();
+
+  // Arms + hammer / scared pose
+  ctx.save();
+  ctx.translate(f*4, h*0.28);
+  ctx.scale(f,1);
+
+  if(h2.hasHammer){
+    const swingAngle=h2.swinging ? -Math.PI/2+(h2.swingTimer/14)*Math.PI*1.3 : -0.3;
+    ctx.strokeStyle='#e67e22'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(swingAngle)*22,Math.sin(swingAngle)*22); ctx.stroke();
+    const hx=Math.cos(swingAngle)*22, hy=Math.sin(swingAngle)*22;
+    // Hammer stick
+    ctx.strokeStyle='#8B6914'; ctx.lineWidth=4;
+    const hd=swingAngle+Math.PI/2;
+    ctx.beginPath();
+    ctx.moveTo(hx+Math.cos(hd)*10, hy+Math.sin(hd)*10);
+    ctx.lineTo(hx-Math.cos(hd)*10, hy-Math.sin(hd)*10);
+    ctx.stroke();
+    // Hammer head
+    ctx.save();
+    ctx.translate(hx+Math.cos(hd)*5, hy+Math.sin(hd)*5);
+    ctx.rotate(swingAngle);
+    ctx.fillStyle='#c0392b'; ctx.fillRect(-8,-7,20,14);
+    ctx.fillStyle='#e74c3c'; ctx.fillRect(-8,-7,20,5);
+    ctx.restore();
+  } else {
+    // Arms up scared
+    const scaredAngle = scared ? -Math.PI*0.8 : -0.3;
+    ctx.strokeStyle='#e67e22'; ctx.lineWidth=5;
+    ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.lineTo(Math.cos(scaredAngle)*20, Math.sin(scaredAngle)*20); ctx.stroke();
+  }
+  ctx.restore();
+
+  // Other arm
+  ctx.strokeStyle='#e67e22'; ctx.lineWidth=5;
+  const otherAngle = scared ? -Math.PI*0.7 : 0.3;
+  ctx.beginPath();
+  ctx.moveTo(-f*4, h*0.28);
+  ctx.lineTo(-f*4+Math.cos(-otherAngle-0.5)*18, h*0.28+Math.sin(otherAngle)*18);
+  ctx.stroke();
+
+  // Head
+  ctx.fillStyle='#FDBCB4'; ctx.strokeStyle='#c9956b'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,h*0.09,13,0,Math.PI*2); ctx.fill(); ctx.stroke();
+
+  // Scared face
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(f*4,h*0.07,2.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(f*4-8,h*0.07,2.5,0,Math.PI*2); ctx.fill();
+  if(scared){
+    // Sweat drops
+    ctx.fillStyle='#85c1e9';
+    ctx.beginPath(); ctx.arc(f*9,h*0.04,3,0,Math.PI*2); ctx.fill();
+    // Mouth open (scared O)
+    ctx.strokeStyle='#555'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,h*0.12,4,0,Math.PI*2); ctx.stroke();
+  } else {
+    ctx.strokeStyle='#555'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(f,h*0.11,4,0.1,Math.PI-0.1); ctx.stroke();
+  }
+
+  // Hard hat
+  ctx.fillStyle='#f1c40f';
+  ctx.beginPath();
+  ctx.ellipse(0,h*0.06-11,15,5,0,Math.PI,Math.PI*2); ctx.fill();
+  ctx.fillRect(-15,h*0.06-14,30,5);
+  ctx.fillStyle='#e67e22'; ctx.fillRect(-12,h*0.06-14,24,2);
+
+  ctx.restore();
+}
+
+function drawParticles(){
+  ctx.save();
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawPopups(){
+  ctx.save();
+  for(const p of popups){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.font='bold 20px Comic Sans MS,Arial';
+    ctx.textAlign='center';
+    ctx.strokeStyle='#000'; ctx.lineWidth=3;
+    ctx.strokeText(p.text,p.x,p.y);
+    ctx.fillStyle=p.color; ctx.fillText(p.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+function drawSirenOverlay(){
+  if(phase==='smash') return;
+  const flash=sirenFlash<10;
+  ctx.save();
+  ctx.globalAlpha=flash?0.07:0.04;
+  ctx.fillStyle=flash?'#e74c3c':'#3498db';
+  ctx.fillRect(0,0,W,H);
+  ctx.restore();
+}
+
+function render(){
+  ctx.save();
+  if(Math.abs(shakeX)>0.3||Math.abs(shakeY)>0.3)
+    ctx.translate(Math.round(shakeX),Math.round(shakeY));
+
+  drawBg();
+  drawSmoke();
+  drawPieces();
+  drawPlane();
+  drawHealthBar();
+  drawPoliceCar();
+  drawOfficer(policeOfficer);
+  drawHarry();
+  drawParticles();
+  drawPopups();
+  drawSirenOverlay();
+
+  ctx.restore();
+}
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+init();
+loop();
+</script>
+</body>
+</html>
