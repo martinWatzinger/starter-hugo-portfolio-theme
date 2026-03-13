@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ballon Abenteuer!</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #5bc0de;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Comic Sans MS', 'Chalkboard SE', Arial, sans-serif;
+      overflow: hidden;
+    }
+    h1 {
+      font-size: 2.3rem;
+      color: #fff;
+      text-shadow: 3px 3px 0 #e74c3c, 5px 5px 12px rgba(0,0,0,0.3);
+      margin-bottom: 8px;
+      letter-spacing: 3px;
+    }
+    #hud {
+      display: flex; gap: 16px; margin-bottom: 8px;
+      font-size: 1.1rem; background: rgba(255,255,255,0.85);
+      padding: 7px 22px; border-radius: 40px;
+      border: 3px solid #e74c3c;
+      box-shadow: 0 3px 0 #c0392b;
+    }
+    #hud .item { display: flex; align-items: center; gap: 5px; font-weight: bold; color: #333; }
+    #hud span { color: #e74c3c; }
+    #hearts { font-size: 1.3rem; }
+    #wrap { position: relative; }
+    canvas {
+      display: block;
+      border: 4px solid #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.2), 0 0 0 4px #e74c3c;
+    }
+    #overlay {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      background: rgba(30,80,160,0.82); border-radius: 8px; z-index: 10;
+    }
+    .card {
+      background: rgba(255,255,255,0.97);
+      border: 5px solid #e74c3c; border-radius: 24px;
+      padding: 28px 48px; text-align: center;
+      box-shadow: 0 8px 0 #c0392b, 0 14px 30px rgba(0,0,0,0.3);
+      max-width: 440px;
+    }
+    .card h2 { font-size: 2.4rem; color: #e74c3c; margin-bottom: 10px; }
+    .card p  { font-size: 1.05rem; color: #555; line-height: 1.8; margin-bottom: 6px; }
+    .card .big { font-size: 1.9rem; color: #f39c12; font-weight: bold; margin: 10px 0; }
+    #startBtn {
+      margin-top: 18px; padding: 14px 50px; font-size: 1.3rem;
+      background: #e74c3c; color: #fff; border: none; border-radius: 50px;
+      cursor: pointer; font-family: inherit; font-weight: bold;
+      letter-spacing: 2px; box-shadow: 0 6px 0 #a93226;
+      transition: transform .1s, box-shadow .1s;
+    }
+    #startBtn:hover { transform: scale(1.06); }
+    #startBtn:active { transform: translateY(3px); box-shadow: 0 3px 0 #a93226; }
+    #tapHint {
+      margin-top: 8px; font-size: 0.85rem; color: rgba(255,255,255,0.7); letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🎈 BALLON ABENTEUER!</h1>
+<div id="hud">
+  <div class="item">⭐ <span id="score">0</span></div>
+  <div class="item">🏆 <span id="hi">0</span></div>
+  <div class="item">📏 <span id="dist">0</span> m</div>
+  <div class="item" id="hearts">🎈🎈🎈🎈🎈</div>
+</div>
+
+<div id="wrap">
+  <canvas id="c" width="700" height="430"></canvas>
+  <div id="overlay">
+    <div class="card">
+      <h2 id="oTitle">🎈 BALLON ABENTEUER!</h2>
+      <p id="oDesc">
+        Fliege mit deinem Ballon durch den Himmel!<br>
+        Weiche Vögeln 🐦 und Blitzen ⚡ aus<br>
+        und sammle Sterne ⭐ und Herzen 💖!
+      </p>
+      <p>
+        <strong>Maus / Klick / Tippen</strong> – Ballon hoch<br>
+        <strong>LEERTASTE</strong> – Ballon hoch<br>
+        <em>Loslassen = langsam sinken</em>
+      </p>
+      <div class="big" id="oScore" style="display:none"></div>
+      <button id="startBtn">🎈 FLIEGEN!</button>
+    </div>
+  </div>
+</div>
+<div id="tapHint">Klicken / Tippen oder LEERTASTE zum Fliegen</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// ── Physics ─────────────────────────────────────────────────────────
+const GRAVITY   = 0.22;
+const LIFT      = -0.55;
+const MAX_UP    = -5;
+const MAX_DOWN  = 4;
+// Balloon hitbox radius (smaller than visual for forgiveness)
+const HITBOX    = 18;
+
+// ── State ────────────────────────────────────────────────────────────
+let balloon, stars, hearts, obstacles, particles, popups;
+let clouds, bgClouds, birds, sunPos;
+let score, hiScore = 0, hp, dist, worldX, frameN;
+let gameState, pressHeld;
+let spawnObs, spawnStar, spawnHeart, spawnBird;
+let shakeX = 0, shakeY = 0;
+let rainbowTrail = [];
+
+function init() {
+  balloon = { x: 140, y: H/2, vy: 0, angle: 0, wobble: 0,
+              flashTimer: 0, invincible: 0, shieldTimer: 0 };
+  stars = []; hearts = []; obstacles = []; particles = []; popups = [];
+  birds = []; rainbowTrail = [];
+  score = 0; hp = 5; dist = 0; worldX = 0; frameN = 0;
+  pressHeld = false;
+  spawnObs   = 180;
+  spawnStar  = 50;
+  spawnHeart = 500;
+  spawnBird  = 200;
+  gameState  = 'playing';
+  buildClouds();
+  sunPos = { x: W - 80, y: 70 };
+  updateHUD();
+}
+
+function buildClouds() {
+  clouds   = [];
+  bgClouds = [];
+  for (let i=0; i<8;  i++) clouds.push(  { x: Math.random()*W*3, y: 20+Math.random()*(H-120), w:80+Math.random()*90, speed: 0.8+Math.random()*0.6 });
+  for (let i=0; i<12; i++) bgClouds.push({ x: Math.random()*W*4, y: 10+Math.random()*(H-140), w:60+Math.random()*70, speed: 0.3+Math.random()*0.3 });
+}
+
+// ── Input ─────────────────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); pressHeld = true; }
+  if (e.code === 'Space' && gameState==='dead') startGame();
+  if (e.code === 'Enter' && gameState==='dead') startGame();
+});
+document.addEventListener('keyup',  e => { if (e.code==='Space') pressHeld = false; });
+canvas.addEventListener('mousedown', e => { pressHeld = true;  if (gameState==='dead') startGame(); });
+canvas.addEventListener('mouseup',   () => { pressHeld = false; });
+canvas.addEventListener('touchstart',e => { e.preventDefault(); pressHeld = true;  if (gameState==='dead') startGame(); }, {passive:false});
+canvas.addEventListener('touchend',  e => { e.preventDefault(); pressHeld = false; }, {passive:false});
+document.getElementById('startBtn').addEventListener('click', startGame);
+
+// ── Audio ─────────────────────────────────────────────────────────────
+let ac;
+function getAC() { if (!ac) ac = new (window.AudioContext||window.webkitAudioContext)(); return ac; }
+function snd(t) {
+  try {
+    const a = getAC();
+    if (t==='pop') {
+      const b=a.createBuffer(1,a.sampleRate*0.1,a.sampleRate);
+      const d=b.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length)*0.6;
+      const s=a.createBufferSource(),g=a.createGain();
+      s.buffer=b;s.connect(g);g.connect(a.destination);g.gain.value=0.5;s.start();
+    } else if (t==='star') {
+      [660,880,1100].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='sine';o.frequency.value=f;
+        g.gain.setValueAtTime(0.12,a.currentTime+i*0.07);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.07+0.15);
+        o.start(a.currentTime+i*0.07);o.stop(a.currentTime+i*0.07+0.15);
+      });
+    } else if (t==='heart') {
+      [523,659,784,1047].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='sine';o.frequency.value=f;
+        g.gain.setValueAtTime(0.14,a.currentTime+i*0.09);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.09+0.16);
+        o.start(a.currentTime+i*0.09);o.stop(a.currentTime+i*0.09+0.16);
+      });
+    } else if (t==='hit') {
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sawtooth';o.frequency.setValueAtTime(300,a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(80,a.currentTime+0.25);
+      g.gain.setValueAtTime(0.25,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.3);
+      o.start();o.stop(a.currentTime+0.3);
+    } else if (t==='over') {
+      [400,300,220,160].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='square';o.frequency.value=f;
+        g.gain.setValueAtTime(0.15,a.currentTime+i*0.2);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.2+0.2);
+        o.start(a.currentTime+i*0.2);o.stop(a.currentTime+i*0.2+0.2);
+      });
+    } else if (t==='shield') {
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';o.frequency.setValueAtTime(440,a.currentTime);
+      o.frequency.exponentialRampToValueAtTime(880,a.currentTime+0.3);
+      g.gain.setValueAtTime(0.12,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.35);
+      o.start();o.stop(a.currentTime+0.35);
+    } else if (t==='bird') {
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';
+      o.frequency.setValueAtTime(800,a.currentTime);
+      o.frequency.setValueAtTime(1000,a.currentTime+0.08);
+      o.frequency.setValueAtTime(800,a.currentTime+0.16);
+      g.gain.setValueAtTime(0.06,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.2);
+      o.start();o.stop(a.currentTime+0.2);
+    }
+  } catch(e) {}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function rand(a,b) { return a+Math.random()*(b-a); }
+function burst(x,y,colors,n=12) {
+  for(let i=0;i<n;i++){
+    const a=rand(0,Math.PI*2),s=rand(2,5);
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(1,3),
+                    life:1,color:colors[Math.floor(Math.random()*colors.length)],r:rand(3,7)});
+  }
+}
+function addPopup(text,x,y,color='#f1c40f'){
+  popups.push({text,x,y,vy:-2,life:1,color});
+}
+function shake(amt=6){ shakeX=rand(-amt,amt); shakeY=rand(-amt,amt); }
+
+// ── Spawning ──────────────────────────────────────────────────────────
+const OBS_TYPES = [
+  { key:'bird_bad', w:36, h:28, pts:0, dmg:1, warn:'⚠️' },
+  { key:'lightning',w:24, h:52, pts:0, dmg:1 },
+  { key:'plane',    w:70, h:32, pts:0, dmg:1 },
+];
+
+function spawnObstacle() {
+  // Warning: easier at start, harder later
+  const speed = rand(2 + worldX/4000, 4 + worldX/2000);
+  const t = OBS_TYPES[Math.floor(Math.random()*OBS_TYPES.length)];
+  const y = rand(40, H - 60);
+  // Gap between obstacles so you can always pass
+  obstacles.push({ ...t, x: W + 60, y, vx: -speed, pulse: 0, angle: 0, warningShown: false });
+}
+
+function spawnStarItem() {
+  const superStar = Math.random() < 0.12;
+  stars.push({
+    x: W + 40,
+    y: rand(40, H - 50),
+    vx: -rand(1.5, 2.5),
+    pulse: rand(0, Math.PI*2),
+    type: superStar ? 'super' : 'normal',
+    pts: superStar ? 5 : 1,
+    collected: false
+  });
+}
+
+function spawnHeartItem() {
+  // Only spawn if hp < 5
+  if (hp >= 5) return;
+  hearts.push({ x: W+40, y: rand(60, H-60), vx: -rand(1,2), pulse: 0 });
+}
+
+function spawnBirdItem() {
+  // Decorative background bird (doesn't hurt)
+  const fromRight = Math.random() > 0.4;
+  birds.push({
+    x: fromRight ? W+50 : -50,
+    y: rand(30, H-80),
+    vx: fromRight ? -rand(0.8,2) : rand(0.8,2),
+    wingUp: true, wingTimer: 0, flap: 0,
+    dec: true  // decorative
+  });
+}
+
+// ── Update ────────────────────────────────────────────────────────────
+function update() {
+  if (gameState !== 'playing') return;
+  frameN++;
+  worldX += 2 + worldX/3000;
+  dist = Math.floor(worldX / 10);
+  shakeX *= 0.7; shakeY *= 0.7;
+
+  // Balloon physics
+  if (pressHeld) balloon.vy += LIFT;
+  else           balloon.vy += GRAVITY;
+  balloon.vy = Math.max(MAX_UP, Math.min(MAX_DOWN, balloon.vy));
+  balloon.y  += balloon.vy;
+  balloon.wobble = Math.sin(frameN * 0.1) * 3;
+
+  // Tilt based on vertical speed
+  balloon.angle = balloon.vy * 0.08;
+
+  // Walls (soft bounce, no instant death)
+  if (balloon.y < 22) { balloon.y = 22; balloon.vy = Math.abs(balloon.vy)*0.5; }
+  if (balloon.y > H - 22) { balloon.y = H-22; balloon.vy = -Math.abs(balloon.vy)*0.5; }
+
+  if (balloon.flashTimer > 0) balloon.flashTimer--;
+  if (balloon.invincible  > 0) balloon.invincible--;
+  if (balloon.shieldTimer > 0) balloon.shieldTimer--;
+
+  // Rainbow trail
+  if (frameN % 3 === 0) {
+    rainbowTrail.push({ x: balloon.x - 20, y: balloon.y, life: 1 });
+  }
+  rainbowTrail.forEach(t => { t.life -= 0.06; });
+  rainbowTrail = rainbowTrail.filter(t => t.life > 0);
+
+  // Scroll clouds
+  for (const c of clouds)   c.x -= c.speed + worldX/2000;
+  for (const c of bgClouds) c.x -= c.speed;
+
+  // Spawn
+  spawnObs--;
+  if (spawnObs <= 0) {
+    spawnObstacle();
+    // Spawn in groups of 2-3 with a gap
+    const extra = Math.random() < 0.4 + worldX/8000 ? 1 : 0;
+    for (let e=0; e<extra; e++) setTimeout(()=>{ if(gameState==='playing') spawnObstacle(); }, 600+e*500);
+    spawnObs = Math.max(90, 220 - worldX/300);
+  }
+  spawnStar--;
+  if (spawnStar <= 0) { spawnStarItem(); spawnStar = Math.max(30, 80 - worldX/500); }
+  spawnHeart -= 1;
+  if (spawnHeart <= 0) { spawnHeartItem(); spawnHeart = Math.max(300, 600 - worldX/200); }
+  spawnBird--;
+  if (spawnBird <= 0) { spawnBirdItem(); spawnBird = rand(80, 200); }
+
+  // Decorative birds
+  for (let i=birds.length-1; i>=0; i--) {
+    const b = birds[i];
+    b.x += b.vx;
+    b.wingTimer++;
+    if (b.wingTimer > 12) { b.wingUp = !b.wingUp; b.wingTimer=0; b.flap = (b.flap+1)%4; }
+    if (b.x < -80 || b.x > W+80) birds.splice(i,1);
+  }
+
+  // Stars
+  for (let i=stars.length-1; i>=0; i--) {
+    const s = stars[i];
+    s.x  += s.vx;
+    s.pulse += 0.08;
+    // Collect
+    const dx = s.x - balloon.x, dy = s.y - balloon.y;
+    if (Math.sqrt(dx*dx+dy*dy) < HITBOX + 20) {
+      score += s.pts;
+      burst(s.x, s.y, ['#f1c40f','#fff','#ffe000'], 10);
+      addPopup(s.type==='super'?'🌟 +5':'+1 ⭐', s.x, s.y-24, '#f1c40f');
+      snd('star');
+      stars.splice(i,1); updateHUD(); continue;
+    }
+    if (s.x < -40) stars.splice(i,1);
+  }
+
+  // Hearts
+  for (let i=hearts.length-1; i>=0; i--) {
+    const h = hearts[i];
+    h.x += h.vx;
+    h.pulse += 0.1;
+    const dx=h.x-balloon.x, dy=h.y-balloon.y;
+    if (Math.sqrt(dx*dx+dy*dy) < HITBOX+22) {
+      hp = Math.min(5, hp+1);
+      burst(h.x,h.y,['#e74c3c','#ff69b4','#fff'],14);
+      addPopup('💖 +1 Leben!', h.x, h.y-28, '#e74c3c');
+      snd('heart');
+      hearts.splice(i,1); updateHUD(); continue;
+    }
+    if (h.x < -40) hearts.splice(i,1);
+  }
+
+  // Obstacles
+  for (let i=obstacles.length-1; i>=0; i--) {
+    const o = obstacles[i];
+    o.x += o.vx;
+    o.pulse += 0.06;
+
+    const dx = o.x - balloon.x, dy = o.y - balloon.y;
+    const hitDist = HITBOX + (o.key==='plane' ? 28 : o.key==='lightning' ? 10 : 14);
+
+    if (Math.sqrt(dx*dx+dy*dy) < hitDist && balloon.invincible <= 0) {
+      if (balloon.shieldTimer > 0) {
+        // Shield absorbs hit
+        balloon.shieldTimer = 0;
+        burst(balloon.x, balloon.y, ['#4dd','#fff','#88f'], 16);
+        addPopup('🛡️ Schild!', balloon.x, balloon.y-40, '#4dd');
+        o.x = -200; // remove
+        shake(4);
+      } else {
+        hp--;
+        balloon.invincible = 120; // 2 seconds invincibility!
+        balloon.flashTimer = 110;
+        shake(10);
+        snd('hit');
+        burst(balloon.x, balloon.y, ['#e74c3c','#ff8800','#fff'], 16);
+        addPopup('💥 Autsch!', balloon.x, balloon.y-40, '#e74c3c');
+        updateHUD();
+        if (hp <= 0) { gameState='dying'; setTimeout(triggerOver, 500); }
+      }
+    }
+    if (o.x < -100) obstacles.splice(i,1);
+  }
+
+  // Bonus shield pickup from some stars
+  if (score > 0 && score % 20 === 0 && frameN % 300 === 0) {
+    stars.push({ x: W+40, y: rand(60,H-60), vx:-2, pulse:0, type:'shield', pts:0, collected:false });
+  }
+
+  // Particles / popups
+  particles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life-=0.03; });
+  particles = particles.filter(p=>p.life>0);
+  popups.forEach(p=>{ p.y+=p.vy; p.life-=0.022; });
+  popups = popups.filter(p=>p.life>0);
+
+  updateHUD();
+}
+
+function triggerOver() {
+  gameState = 'dead';
+  snd('over');
+  if (score>hiScore) hiScore=score;
+  updateHUD();
+  document.getElementById('oTitle').textContent = score>=15 ? '🏆 Toll gemacht!' : '🎈 Oh nein!';
+  document.getElementById('oDesc').innerHTML = hp<=0 ? 'Der Ballon hat zu viel abbekommen!<br>Versuch es nochmal!' : 'Flieg weiter!';
+  document.getElementById('oScore').style.display='block';
+  document.getElementById('oScore').textContent = `⭐ ${score} Sterne · 📏 ${dist} m`;
+  document.getElementById('startBtn').textContent='🎈 NOCHMAL!';
+  document.getElementById('overlay').style.display='flex';
+}
+
+function startGame() {
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('oScore').style.display='none';
+  document.getElementById('startBtn').textContent='🎈 FLIEGEN!';
+  document.getElementById('oTitle').textContent='🎈 BALLON ABENTEUER!';
+  document.getElementById('oDesc').innerHTML='Fliege mit deinem Ballon durch den Himmel!<br>Weiche Vögeln 🐦 und Blitzen ⚡ aus<br>und sammle Sterne ⭐ und Herzen 💖!';
+  init();
+  try{getAC();}catch(e){}
+}
+
+function updateHUD() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('hi').textContent    = hiScore;
+  document.getElementById('dist').textContent  = dist;
+  const h = document.getElementById('hearts');
+  h.textContent = '🎈'.repeat(Math.max(0,hp)) + '🖤'.repeat(Math.max(0,5-hp));
+}
+
+// ── Drawing ────────────────────────────────────────────────────────────
+function drawSky() {
+  // Gradient sky
+  const t = (worldX / 5000) % 1;
+  let c1, c2, c3;
+  if (t < 0.33) {
+    // Day
+    c1='#2980b9'; c2='#5dade2'; c3='#aed6f1';
+  } else if (t < 0.66) {
+    // Sunset
+    c1='#c0392b'; c2='#e67e22'; c3='#f9e4b7';
+  } else {
+    // Night
+    c1='#1a1a4e'; c2='#2c3e7a'; c3='#485fa8';
+  }
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0, c1); g.addColorStop(0.5, c2); g.addColorStop(1, c3);
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+  // Sun / Moon
+  const skyT = (worldX/5000)%1;
+  ctx.save();
+  if (skyT < 0.66) {
+    // Sun
+    ctx.shadowColor='#ffe000'; ctx.shadowBlur=30;
+    ctx.fillStyle='#f9e400';
+    ctx.beginPath(); ctx.arc(sunPos.x, sunPos.y, 32, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(255,230,0,0.15)';
+    ctx.beginPath(); ctx.arc(sunPos.x, sunPos.y, 55, 0, Math.PI*2); ctx.fill();
+  } else {
+    // Moon
+    ctx.shadowColor='#ddeeff'; ctx.shadowBlur=20;
+    ctx.fillStyle='#eef0d0';
+    ctx.beginPath(); ctx.arc(sunPos.x, sunPos.y, 26, 0, Math.PI*2); ctx.fill();
+    // Stars in night sky
+    ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,0.8)';
+    for(let i=0;i<30;i++){
+      const sx=(i*173+worldX*0.02)%W, sy=(i*43)%(H*0.6);
+      const br=0.5+Math.sin(frameN*0.05+i)*0.5;
+      ctx.globalAlpha=br*0.9;
+      ctx.beginPath(); ctx.arc(sx,sy,1.5,0,Math.PI*2); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+function drawCloud(c, alpha=1) {
+  const cx = ((c.x % (W*4)) + W*4) % (W*4) - W;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.shadowColor='rgba(255,255,255,0.4)'; ctx.shadowBlur=8;
+  ctx.beginPath();
+  ctx.arc(cx,           c.y, c.w*0.28, 0, Math.PI*2);
+  ctx.arc(cx+c.w*0.28,  c.y-c.w*0.12, c.w*0.22, 0, Math.PI*2);
+  ctx.arc(cx+c.w*0.55,  c.y, c.w*0.26, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBird(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  if (b.vx < 0) ctx.scale(-1,1);
+  ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 2.5; ctx.lineCap='round';
+  const wing = b.wingUp ? -8 : 5;
+  // Body
+  ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(12,0); ctx.stroke();
+  // Wings
+  ctx.beginPath(); ctx.moveTo(-2,0); ctx.quadraticCurveTo(-12,wing,-20,wing/2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(2,0);  ctx.quadraticCurveTo(12,wing,20,wing/2);  ctx.stroke();
+  // Head
+  ctx.fillStyle='#2c3e50';
+  ctx.beginPath(); ctx.arc(14,-2,4,0,Math.PI*2); ctx.fill();
+  // Beak
+  ctx.fillStyle='#e67e22';
+  ctx.beginPath(); ctx.moveTo(17,-2); ctx.lineTo(22,-1); ctx.lineTo(17,1); ctx.fill();
+  ctx.restore();
+}
+
+function drawObstacle(o) {
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  const bob = Math.sin(o.pulse)*4;
+  if (o.key==='bird_bad') {
+    // Angry bird (darker, red eyes)
+    ctx.strokeStyle='#8B0000'; ctx.lineWidth=3; ctx.lineCap='round';
+    const wing = Math.sin(frameN*0.25+o.x)*-10;
+    ctx.beginPath(); ctx.moveTo(-10,0+bob); ctx.lineTo(12,0+bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-2,0+bob); ctx.quadraticCurveTo(-14,wing-5+bob,-22,wing+bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2,0+bob);  ctx.quadraticCurveTo(14,wing-5+bob,22,wing+bob);  ctx.stroke();
+    ctx.fillStyle='#8B0000';
+    ctx.beginPath(); ctx.arc(14,-2+bob,5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ff0000';
+    ctx.beginPath(); ctx.arc(15,-3+bob,2,0,Math.PI*2); ctx.fill();
+    // Warning glow
+    ctx.globalAlpha=0.3; ctx.fillStyle='#ff0000';
+    ctx.beginPath(); ctx.arc(0,bob,30,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  } else if (o.key==='lightning') {
+    ctx.shadowColor='#f1c40f'; ctx.shadowBlur=15+Math.sin(o.pulse)*5;
+    ctx.fillStyle='#f1c40f';
+    ctx.font=`${40+Math.sin(o.pulse)*4}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('⚡',0,bob);
+  } else if (o.key==='plane') {
+    ctx.shadowColor='rgba(255,0,0,0.4)'; ctx.shadowBlur=8;
+    ctx.font=`50px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('✈️',0,bob);
+    // Warning
+    ctx.globalAlpha=0.2+Math.sin(o.pulse)*0.1;
+    ctx.fillStyle='#e74c3c';
+    ctx.beginPath(); ctx.ellipse(0,bob,45,20,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  ctx.restore();
+}
+
+function drawStar(s) {
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  const sc = 1+Math.sin(s.pulse)*0.2;
+  ctx.scale(sc,sc);
+  ctx.shadowColor = s.type==='super'?'#f1c40f':'#ffe000'; ctx.shadowBlur=12;
+  ctx.font = s.type==='super'?'32px serif':s.type==='shield'?'30px serif':'26px serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(s.type==='super'?'🌟':s.type==='shield'?'🛡️':'⭐',0,0);
+  ctx.restore();
+}
+
+function drawHeart(h) {
+  ctx.save();
+  ctx.translate(h.x, h.y);
+  const sc = 1+Math.sin(h.pulse)*0.2;
+  ctx.scale(sc,sc);
+  ctx.shadowColor='#e74c3c'; ctx.shadowBlur=14;
+  ctx.font='28px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('💖',0,0);
+  ctx.restore();
+}
+
+// ── Draw balloon + character ───────────────────────────────────────────
+function drawBalloon() {
+  const bx = balloon.x, by = balloon.y;
+  const flash = balloon.flashTimer>0 && Math.floor(balloon.flashTimer/5)%2===0;
+
+  // Rainbow trail
+  const rainbowColors=['#e74c3c','#e67e22','#f1c40f','#2ecc71','#3498db','#9b59b6'];
+  for(let i=0;i<rainbowTrail.length;i++){
+    const t = rainbowTrail[i];
+    ctx.save();
+    ctx.globalAlpha = t.life * 0.5;
+    ctx.fillStyle = rainbowColors[i%rainbowColors.length];
+    ctx.beginPath(); ctx.arc(t.x, t.y, 6*t.life, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(balloon.angle + Math.sin(frameN*0.05)*0.03);
+
+  if (flash) ctx.globalAlpha = 0.35;
+
+  // Shield ring
+  if (balloon.shieldTimer > 0) {
+    ctx.save();
+    ctx.globalAlpha = 0.4 + Math.sin(frameN*0.15)*0.2;
+    ctx.strokeStyle='#4dd'; ctx.lineWidth=5;
+    ctx.shadowColor='#4dd'; ctx.shadowBlur=20;
+    ctx.beginPath(); ctx.arc(0, 0, 46, 0, Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+
+  // String
+  ctx.strokeStyle='#666'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(0, 28);
+  ctx.quadraticCurveTo(balloon.wobble, 50, 0, 70);
+  ctx.stroke();
+
+  // Basket
+  ctx.fillStyle='#8B6914';
+  ctx.beginPath(); ctx.roundRect(-14, 60, 28, 18, 4); ctx.fill();
+  ctx.strokeStyle='#6b5010'; ctx.lineWidth=1.5;
+  ctx.strokeRect(-14,60,28,18);
+  // Basket weave lines
+  ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(-7,60); ctx.lineTo(-7,78); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,60);  ctx.lineTo(0,78);  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7,60);  ctx.lineTo(7,78);  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-14,68); ctx.lineTo(14,68); ctx.stroke();
+
+  // Little person in basket
+  // Head
+  ctx.fillStyle='#FDBCB4'; ctx.strokeStyle='#c9956b'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(0,56,7,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  // Eyes
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-2.5,55.5,1.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(2.5,55.5,1.5,0,Math.PI*2); ctx.fill();
+  // Smile
+  ctx.strokeStyle='#555'; ctx.lineWidth=1.2;
+  ctx.beginPath(); ctx.arc(0,57,3,0.1,Math.PI-0.1); ctx.stroke();
+  // Hair
+  ctx.fillStyle='#8B4513';
+  ctx.beginPath(); ctx.arc(0,50,7,Math.PI,Math.PI*2); ctx.fill();
+
+  // Balloon body (big, round, colorful)
+  const bColors = [
+    ['#e74c3c','#ff8888'],
+    ['#3498db','#88ccff'],
+    ['#2ecc71','#88ffaa'],
+    ['#f39c12','#ffd080'],
+    ['#9b59b6','#cc88ff'],
+  ];
+  const ci = Math.floor((worldX/600))%bColors.length;
+  const [col1, col2] = bColors[ci];
+
+  // Shadow under balloon
+  ctx.fillStyle='rgba(0,0,0,0.1)';
+  ctx.beginPath(); ctx.ellipse(4,8,28,10,0,0,Math.PI*2); ctx.fill();
+
+  // Main balloon
+  const bGrad = ctx.createRadialGradient(-10,-22,4, 0,-10,32);
+  bGrad.addColorStop(0, col2);
+  bGrad.addColorStop(0.5, col1);
+  bGrad.addColorStop(1,   shadeHex(col1,-30));
+  ctx.fillStyle=bGrad;
+  ctx.shadowColor='rgba(0,0,0,0.2)'; ctx.shadowBlur=8;
+  ctx.beginPath(); ctx.ellipse(0,-8,26,32,0,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Highlight
+  ctx.fillStyle='rgba(255,255,255,0.35)';
+  ctx.beginPath(); ctx.ellipse(-8,-18,9,13,Math.PI/4,0,Math.PI*2); ctx.fill();
+
+  // Balloon knot
+  ctx.fillStyle=shadeHex(col1,-20);
+  ctx.beginPath(); ctx.arc(0,24,4,0,Math.PI*2); ctx.fill();
+
+  // Panel lines
+  ctx.strokeStyle='rgba(0,0,0,0.12)'; ctx.lineWidth=1.5;
+  for(let p=0;p<4;p++){
+    const a = (p/4)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(0,24);
+    ctx.quadraticCurveTo(Math.sin(a)*26, -8, 0,-40);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function shadeHex(col, amt) {
+  // Works with rgb strings or hex
+  const m = col.match(/\d+/g);
+  if (!m) return col;
+  if (col.startsWith('#')) {
+    const n = parseInt(col.slice(1),16);
+    const r=Math.max(0,Math.min(255,(n>>16)+amt));
+    const g=Math.max(0,Math.min(255,((n>>8)&0xff)+amt));
+    const b=Math.max(0,Math.min(255,(n&0xff)+amt));
+    return `rgb(${r},${g},${b})`;
+  }
+  return col;
+}
+
+function drawParticles() {
+  ctx.save();
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawPopups() {
+  ctx.save();
+  for(const p of popups){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.font='bold 19px Comic Sans MS, Arial';
+    ctx.textAlign='center';
+    ctx.strokeStyle='#000'; ctx.lineWidth=3;
+    ctx.strokeText(p.text,p.x,p.y);
+    ctx.fillStyle=p.color;
+    ctx.fillText(p.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+// ── Main render ────────────────────────────────────────────────────────
+function render() {
+  ctx.save();
+  if (Math.abs(shakeX)>0.3||Math.abs(shakeY)>0.3)
+    ctx.translate(Math.round(shakeX), Math.round(shakeY));
+
+  drawSky();
+
+  // Background clouds (slow parallax)
+  for(const c of bgClouds) drawCloud(c, 0.45);
+  // Foreground clouds
+  for(const c of clouds)   drawCloud(c, 0.85);
+
+  // Decorative birds
+  for(const b of birds) drawBird(b);
+
+  // Items
+  for(const s of stars)  drawStar(s);
+  for(const h of hearts) drawHeart(h);
+
+  // Obstacles
+  for(const o of obstacles) drawObstacle(o);
+
+  // Particles (below balloon)
+  drawParticles();
+
+  // Balloon
+  drawBalloon();
+
+  // Popups
+  drawPopups();
+
+  // Death fade
+  if (gameState==='dying') {
+    ctx.fillStyle='rgba(200,0,0,0.18)'; ctx.fillRect(0,0,W,H);
+  }
+
+  ctx.restore();
+}
+
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+init();
+loop();
+</script>
+</body>
+</html>
