@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Polizei Hubschrauber!</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{
+      background:#0a0a1a;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      min-height:100vh;
+      font-family:'Comic Sans MS','Chalkboard SE',Arial,sans-serif;
+      overflow:hidden;
+    }
+    h1{
+      font-size:2rem;color:#3498db;
+      text-shadow:3px 3px 0 #1a5276,5px 5px 12px rgba(0,0,0,0.5);
+      margin-bottom:8px;letter-spacing:2px;
+    }
+    #hud{
+      display:flex;gap:16px;margin-bottom:8px;
+      font-size:1.05rem;background:rgba(0,0,0,0.7);
+      padding:6px 20px;border-radius:30px;
+      border:2px solid #3498db;color:#fff;
+    }
+    #hud span{color:#3df;font-weight:bold;}
+    #wrap{position:relative;}
+    canvas{
+      display:block;border:4px solid #3498db;
+      border-radius:8px;
+      box-shadow:0 8px 0 rgba(0,0,0,0.5),0 0 40px rgba(52,152,219,0.3);
+    }
+    #overlay{
+      position:absolute;inset:0;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      background:rgba(5,5,20,0.88);border-radius:6px;z-index:10;
+    }
+    .card{
+      background:rgba(10,20,60,0.97);
+      border:5px solid #3498db;border-radius:20px;
+      padding:28px 46px;text-align:center;
+      box-shadow:0 8px 0 #1a5276,0 14px 30px rgba(0,0,0,0.5);
+      max-width:460px;color:#fff;
+    }
+    .card h2{font-size:2.2rem;color:#3df;margin-bottom:10px;}
+    .card p{font-size:1rem;color:#acd;line-height:1.8;}
+    .card .big{font-size:1.9rem;color:#f1c40f;font-weight:bold;margin:12px 0;}
+    #startBtn{
+      margin-top:18px;padding:13px 46px;font-size:1.2rem;
+      background:#3498db;color:#fff;border:none;border-radius:50px;
+      cursor:pointer;font-family:inherit;font-weight:bold;
+      letter-spacing:2px;box-shadow:0 5px 0 #1a5276;
+      transition:transform .1s,box-shadow .1s;
+    }
+    #startBtn:hover{transform:scale(1.06);}
+    #startBtn:active{transform:translateY(3px);box-shadow:0 2px 0 #1a5276;}
+    #controls{
+      display:none;grid-template-columns:repeat(4,58px);
+      gap:6px;margin-top:10px;
+    }
+    @media(pointer:coarse){#controls{display:grid;}}
+    .cbtn{
+      height:58px;background:rgba(52,152,219,0.15);
+      border:2px solid #3498db;border-radius:10px;
+      color:#3df;font-size:1.5rem;cursor:pointer;touch-action:manipulation;
+    }
+    .cbtn:active{background:rgba(52,152,219,0.4);}
+    #msg{
+      position:absolute;top:12px;left:0;right:0;
+      text-align:center;font-size:1.1rem;font-weight:bold;
+      color:#fff;text-shadow:2px 2px 4px #000;
+      pointer-events:none;z-index:5;
+    }
+  </style>
+</head>
+<body>
+<h1>🚁 POLIZEI HUBSCHRAUBER!</h1>
+<div id="hud">
+  🚔 Gefasst: <span id="caught">0</span>/<span id="total">0</span>
+  &nbsp;|&nbsp;⭐ <span id="score">0</span>
+  &nbsp;|&nbsp;⏱ <span id="timer">60</span>s
+  &nbsp;|&nbsp;<span id="phaseLabel">Patrouille</span>
+</div>
+<div id="wrap">
+  <canvas id="c" width="800" height="460"></canvas>
+  <div id="msg"></div>
+  <div id="overlay">
+    <div class="card">
+      <h2 id="oTitle">🚁 POLIZEI HUBSCHRAUBER!</h2>
+      <p id="oDesc">
+        Fliege den Polizei-Helikopter und <strong>fasse die flüchtenden Autos!</strong><br><br>
+        Fliege <strong>über ein Auto</strong> und halte <strong>SPACE</strong> gedrückt<br>
+        um es mit dem Scheinwerfer zu erwischen!<br><br>
+        <strong>← → ↑ ↓</strong> Fliegen &nbsp;|&nbsp; <strong>SPACE</strong> Scheinwerfer / Verhaften
+      </p>
+      <div class="big" id="oScore" style="display:none"></div>
+      <button id="startBtn">🚁 EINSATZ STARTEN!</button>
+    </div>
+  </div>
+</div>
+<div id="controls">
+  <button class="cbtn" id="cLeft">⬅️</button>
+  <button class="cbtn" id="cUp">⬆️</button>
+  <button class="cbtn" id="cDown">⬇️</button>
+  <button class="cbtn" id="cRight">➡️</button>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+const W=canvas.width, H=canvas.height;
+
+// Road layout
+const ROAD_Y   = H-110;
+const ROAD_H   = 80;
+const ROAD_MID = ROAD_Y + ROAD_H/2;
+
+// ── State ──────────────────────────────────────────────────────────
+let heli, criminals, particles, popups, buildings, streetLights;
+let score, caughtCount, totalCriminals, timeLeft, frameN, worldX;
+let phase, sirenTimer, msgText;
+let gameTimer;
+
+function setMsg(t){ msgText=t; document.getElementById('msg').textContent=t; }
+function updateHUD(){
+  document.getElementById('caught').textContent=caughtCount;
+  document.getElementById('total').textContent=totalCriminals;
+  document.getElementById('score').textContent=score;
+  document.getElementById('timer').textContent=Math.max(0,Math.ceil(timeLeft));
+}
+
+function init(){
+  phase='playing'; frameN=0; worldX=0;
+  score=0; caughtCount=0; sirenTimer=0;
+  particles=[]; popups=[];
+
+  heli={
+    x:160, y:H/2-40,
+    vx:0, vy:0,
+    rotorAngle:0,
+    spotlight:false, spotPower:0,
+    sirenFlash:0,
+    wobble:0
+  };
+
+  totalCriminals=6;
+  criminals=[];
+  for(let i=0;i<totalCriminals;i++){
+    const lane=Math.floor(Math.random()*2); // 0=top lane, 1=bottom lane
+    const fromRight=Math.random()>0.5;
+    criminals.push({
+      x: fromRight ? W+100+i*200 : -(100+i*200),
+      y: ROAD_Y + (lane===0?16:48),
+      lane,
+      vx: fromRight ? -(1.5+Math.random()*1.5) : (1.5+Math.random()*1.5),
+      w:56, h:28,
+      color:`hsl(${Math.floor(Math.random()*360)},65%,55%)`,
+      caught:false, catchTimer:0,
+      flashTimer:0, skidding:false, skidTimer:0,
+      caughtAnim:0,
+      facing: fromRight?-1:1,
+      wheelAngle:0,
+      type:['sedan','truck','sports'][Math.floor(Math.random()*3)]
+    });
+  }
+
+  buildCity();
+  timeLeft=70;
+  clearInterval(gameTimer);
+  gameTimer=setInterval(()=>{
+    if(phase==='playing'){
+      timeLeft-=1;
+      updateHUD();
+      if(timeLeft<=0) endGame(false);
+    }
+  },1000);
+
+  updateHUD();
+  setMsg('🚁 Fasse alle flüchtenden Autos!');
+  document.getElementById('phaseLabel').textContent='Einsatz läuft!';
+}
+
+function buildCity(){
+  buildings=[];
+  let bx=20;
+  while(bx<W*4){
+    const bw=50+Math.floor(Math.random()*80);
+    const bh=40+Math.floor(Math.random()*120);
+    buildings.push({x:bx, w:bw, h:bh,
+      color:`hsl(${200+Math.random()*40},${20+Math.random()*20}%,${15+Math.random()*20}%)`,
+      litWindows:[]
+    });
+    // Windows
+    const cols=Math.floor(bw/18), rows=Math.floor(bh/20);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++)
+      if(Math.random()>0.35) buildings[buildings.length-1].litWindows.push({c,r});
+    bx+=bw+10+Math.floor(Math.random()*40);
+  }
+  streetLights=[];
+  for(let i=0;i<40;i++) streetLights.push({x:80+i*200});
+}
+
+// ── Input ─────────────────────────────────────────────────────────
+const keys={};
+document.addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+  if(e.code==='Enter'&&(phase==='win'||phase==='lose')) startGame();
+});
+document.addEventListener('keyup',e=>{keys[e.code]=false;});
+document.getElementById('cLeft').addEventListener('touchstart',  e=>{e.preventDefault();keys['ArrowLeft']=true;});
+document.getElementById('cLeft').addEventListener('touchend',    ()=>keys['ArrowLeft']=false);
+document.getElementById('cRight').addEventListener('touchstart', e=>{e.preventDefault();keys['ArrowRight']=true;});
+document.getElementById('cRight').addEventListener('touchend',   ()=>keys['ArrowRight']=false);
+document.getElementById('cUp').addEventListener('touchstart',    e=>{e.preventDefault();keys['ArrowUp']=true;});
+document.getElementById('cUp').addEventListener('touchend',      ()=>keys['ArrowUp']=false);
+document.getElementById('cDown').addEventListener('touchstart',  e=>{e.preventDefault();keys['ArrowDown']=true;});
+document.getElementById('cDown').addEventListener('touchend',    ()=>keys['ArrowDown']=false);
+['cLeft','cRight','cUp','cDown'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',()=>{
+    const code={'cLeft':'ArrowLeft','cRight':'ArrowRight','cUp':'ArrowUp','cDown':'ArrowDown'}[id];
+    keys[code]=true; setTimeout(()=>keys[code]=false,150);
+  });
+});
+
+// ── Audio ─────────────────────────────────────────────────────────
+let ac;
+function getAC(){if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();return ac;}
+function snd(t){
+  try{
+    const a=getAC();
+    if(t==='siren'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);o.type='sawtooth';
+      o.frequency.setValueAtTime(700,a.currentTime);
+      o.frequency.setValueAtTime(500,a.currentTime+0.25);
+      o.frequency.setValueAtTime(700,a.currentTime+0.5);
+      g.gain.setValueAtTime(0.1,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.6);
+      o.start();o.stop(a.currentTime+0.6);
+    } else if(t==='catch'){
+      [523,659,784,1047,1318].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='sine';o.frequency.value=f;
+        g.gain.setValueAtTime(0.13,a.currentTime+i*0.08);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.08+0.15);
+        o.start(a.currentTime+i*0.08);o.stop(a.currentTime+i*0.08+0.15);
+      });
+    } else if(t==='spotlight'){
+      const o=a.createOscillator(),g=a.createGain();
+      o.connect(g);g.connect(a.destination);
+      o.type='sine';o.frequency.value=880;
+      g.gain.setValueAtTime(0.06,a.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.1);
+      o.start();o.stop(a.currentTime+0.1);
+    } else if(t==='win'){
+      [523,659,784,659,784,1047].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='sine';o.frequency.value=f;
+        g.gain.setValueAtTime(0.15,a.currentTime+i*0.12);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.12+0.2);
+        o.start(a.currentTime+i*0.12);o.stop(a.currentTime+i*0.12+0.2);
+      });
+    } else if(t==='lose'){
+      [400,320,240,180].forEach((f,i)=>{
+        const o=a.createOscillator(),g=a.createGain();
+        o.connect(g);g.connect(a.destination);
+        o.type='square';o.frequency.value=f;
+        g.gain.setValueAtTime(0.12,a.currentTime+i*0.18);
+        g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+i*0.18+0.2);
+        o.start(a.currentTime+i*0.18);o.stop(a.currentTime+i*0.18+0.2);
+      });
+    } else if(t==='skid'){
+      const b=a.createBuffer(1,a.sampleRate*0.3,a.sampleRate);
+      const d=b.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*(1-i/d.length)*0.3;
+      const s=a.createBufferSource(),g=a.createGain();
+      s.buffer=b;s.connect(g);g.connect(a.destination);g.gain.value=0.4;s.start();
+    }
+  }catch(e){}
+}
+
+// ── Helpers ───────────────────────────────────────────────────────
+function rand(a,b){return a+Math.random()*(b-a);}
+function burst(x,y,colors,n=14){
+  for(let i=0;i<n;i++){
+    const a=rand(0,Math.PI*2),s=rand(2,6);
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(1,4),
+      life:1,color:colors[Math.floor(Math.random()*colors.length)],r:rand(3,7)});
+  }
+}
+function addPopup(text,x,y,color='#f1c40f'){
+  popups.push({text,x,y,vy:-2.5,life:1,color});
+}
+
+// ── Update ────────────────────────────────────────────────────────
+function update(){
+  if(phase!=='playing') return;
+  frameN++;
+  worldX+=0.5; // slow background scroll
+
+  // Heli rotor
+  heli.rotorAngle+=0.25+Math.abs(heli.vx)*0.04+Math.abs(heli.vy)*0.04;
+  heli.wobble=Math.sin(frameN*0.08)*1.5;
+  heli.sirenFlash=(heli.sirenFlash+1)%30;
+
+  // Siren sound loop
+  sirenTimer++;
+  if(sirenTimer%45===0) snd('siren');
+
+  // Move heli
+  const SPEED=4.5, DRAG=0.82;
+  if(keys['ArrowLeft'])  heli.vx-=0.35;
+  if(keys['ArrowRight']) heli.vx+=0.35;
+  if(keys['ArrowUp'])    heli.vy-=0.35;
+  if(keys['ArrowDown'])  heli.vy+=0.35;
+  heli.vx*=DRAG; heli.vy*=DRAG;
+  heli.vx=Math.max(-SPEED,Math.min(SPEED,heli.vx));
+  heli.vy=Math.max(-SPEED,Math.min(SPEED,heli.vy));
+  heli.x+=heli.vx; heli.y+=heli.vy;
+  // Clamp
+  heli.x=Math.max(50,Math.min(W-50,heli.x));
+  heli.y=Math.max(30,Math.min(ROAD_Y-20,heli.y));
+
+  // Spotlight
+  const spaceHeld=keys['Space'];
+  heli.spotlight=spaceHeld;
+  if(spaceHeld) heli.spotPower=Math.min(1,heli.spotPower+0.04);
+  else          heli.spotPower=Math.max(0,heli.spotPower-0.06);
+
+  // Criminals
+  for(let i=criminals.length-1;i>=0;i--){
+    const c=criminals[i];
+    if(c.caught){
+      c.caughtAnim++;
+      c.flashTimer=Math.max(0,c.flashTimer-1);
+      // Caught cars shrink and disappear
+      if(c.caughtAnim>80){
+        criminals.splice(i,1);
+        caughtCount++;
+        updateHUD();
+        if(criminals.filter(c=>!c.caught).length===0){
+          // All caught!
+          setTimeout(()=>endGame(true),800);
+        }
+      }
+      continue;
+    }
+
+    c.wheelAngle+=Math.abs(c.vx)*0.08;
+    c.flashTimer=Math.max(0,c.flashTimer-1);
+
+    // Criminal drives – tries to flee from heli
+    const dx=c.x-heli.x, dy=c.y-heli.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist<180){
+      // Panic! Speed up in same direction
+      const panic=Math.max(0,(180-dist)/180)*0.15;
+      c.vx+=c.vx>0?panic:-panic;
+    }
+
+    // Limit speed
+    const maxSpd=c.type==='truck'?2.5:c.type==='sports'?4.5:3.5;
+    c.vx=Math.max(-maxSpd,Math.min(maxSpd,c.vx));
+    c.x+=c.vx;
+    c.facing=c.vx>0?1:-1;
+
+    // Wrap around screen
+    if(c.x>W+80)  c.x=-80;
+    if(c.x<-80)   c.x=W+80;
+
+    // Skid marks when fleeing
+    if(dist<120 && Math.random()<0.03){
+      particles.push({x:c.x+rand(-15,15),y:c.y+c.h/2,
+        vx:0,vy:0,life:0.5,color:'rgba(0,0,0,0.4)',r:rand(3,7),static:true});
+    }
+
+    // Check if spotlight catches criminal
+    if(heli.spotlight && heli.spotPower>0.7){
+      const spotX=heli.x, spotY=heli.y+30;
+      const spotReach=160*heli.spotPower;
+      const cdx=c.x-spotX, cdy=c.y-spotY;
+      if(Math.abs(cdx)<40 && cdy>0 && cdy<spotReach){
+        c.flashTimer=10;
+        // Fill catch meter
+        c.catchTimer+=1+heli.spotPower*0.5;
+        if(c.catchTimer>=60){
+          c.caught=true;
+          c.vx=0;
+          snd('catch');
+          snd('skid');
+          burst(c.x,c.y,['#e74c3c','#3498db','#f1c40f','#fff'],20);
+          addPopup('🚔 GEFASST!',c.x,c.y-40,'#3df');
+          addPopup(`+${100+(timeLeft>30?50:0)}`,c.x,c.y-70,'#f1c40f');
+          score+=100+(timeLeft>30?50:0);
+          updateHUD();
+        }
+      } else {
+        c.catchTimer=Math.max(0,c.catchTimer-0.5);
+      }
+    } else {
+      c.catchTimer=Math.max(0,c.catchTimer-0.3);
+    }
+  }
+
+  // Particles
+  particles.forEach(p=>{
+    if(!p.static){p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;}
+    p.life-=p.static?0.008:0.025;
+  });
+  particles=particles.filter(p=>p.life>0);
+  popups.forEach(p=>{p.y+=p.vy;p.life-=0.02;});
+  popups=popups.filter(p=>p.life>0);
+}
+
+function endGame(win){
+  clearInterval(gameTimer);
+  phase=win?'win':'lose';
+  if(win) snd('win'); else snd('lose');
+  document.getElementById('oScore').style.display='block';
+  document.getElementById('oScore').textContent=
+    win?`🏆 Alle ${totalCriminals} gefasst! ${score} Punkte`
+       :`🚔 ${caughtCount}/${totalCriminals} gefasst · ${score} Punkte`;
+  document.getElementById('oTitle').textContent= win?'✅ MISSION ERFÜLLT!':'⏱ ZEIT ABGELAUFEN!';
+  document.getElementById('oDesc').innerHTML=win
+    ?'Ausgezeichnet! Alle Verdächtigen wurden festgenommen!<br>🎖️ Einsatz erfolgreich!'
+    :`Es sind noch ${totalCriminals-caughtCount} Kriminelle entkommen!<br>Nächstes Mal schaffst du es!`;
+  document.getElementById('startBtn').textContent='🚁 NEUER EINSATZ';
+  document.getElementById('overlay').style.display='flex';
+  document.getElementById('phaseLabel').textContent=win?'✅ Erfolg!':'❌ Zeit!';
+}
+
+function startGame(){
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('oScore').style.display='none';
+  document.getElementById('startBtn').textContent='🚁 EINSATZ STARTEN!';
+  document.getElementById('oTitle').textContent='🚁 POLIZEI HUBSCHRAUBER!';
+  setMsg('');
+  init();
+  try{getAC();}catch(e){}
+}
+
+// ── Drawing ────────────────────────────────────────────────────────
+
+function drawNightCity(){
+  // Dark sky
+  const sky=ctx.createLinearGradient(0,0,0,ROAD_Y);
+  sky.addColorStop(0,'#040818');
+  sky.addColorStop(1,'#0a1628');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,ROAD_Y);
+
+  // Stars
+  ctx.fillStyle='rgba(255,255,255,0.6)';
+  for(let i=0;i<50;i++){
+    const sx=(i*173+worldX*0.1)%W, sy=(i*37)%(ROAD_Y-30);
+    const br=0.3+Math.sin(frameN*0.04+i)*0.7;
+    ctx.globalAlpha=br;
+    ctx.fillRect(sx,sy,1.5,1.5);
+  }
+  ctx.globalAlpha=1;
+
+  // Moon
+  ctx.save();
+  ctx.shadowColor='#fffbe0'; ctx.shadowBlur=20;
+  ctx.fillStyle='#fffbe0';
+  ctx.beginPath(); ctx.arc(W-80,50,26,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.restore();
+
+  // Buildings
+  for(const b of buildings){
+    const bx=b.x-worldX*0.4;
+    if(bx>W+100||bx+b.w<-20) continue;
+    const by=ROAD_Y-b.h;
+    ctx.fillStyle=b.color;
+    ctx.fillRect(bx,by,b.w,b.h);
+    // Roof details
+    ctx.fillStyle='rgba(255,255,255,0.05)';
+    ctx.fillRect(bx,by,b.w,4);
+    // Lit windows
+    for(const w of b.litWindows){
+      const wx=bx+6+w.c*18, wy=by+8+w.r*20;
+      if(wx+12>bx && wx<bx+b.w){
+        const flicker=Math.sin(frameN*0.03+w.c*13+w.r*7)>0.3;
+        ctx.fillStyle=flicker?'rgba(255,230,140,0.85)':'rgba(255,230,140,0.4)';
+        ctx.fillRect(wx,wy,12,10);
+      }
+    }
+    // Antenna
+    if(b.h>80){
+      ctx.strokeStyle='#555'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(bx+b.w/2,by); ctx.lineTo(bx+b.w/2,by-20); ctx.stroke();
+      const redLight=Math.floor(frameN/30)%2===0;
+      ctx.fillStyle=redLight?'#e74c3c':'#441111';
+      ctx.beginPath(); ctx.arc(bx+b.w/2,by-22,3,0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  // Road
+  const rg=ctx.createLinearGradient(0,ROAD_Y,0,ROAD_Y+ROAD_H);
+  rg.addColorStop(0,'#2c2c2c'); rg.addColorStop(1,'#222');
+  ctx.fillStyle=rg; ctx.fillRect(0,ROAD_Y,W,ROAD_H);
+  // Road edges
+  ctx.strokeStyle='#fff'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(0,ROAD_Y+1); ctx.lineTo(W,ROAD_Y+1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,ROAD_Y+ROAD_H-1); ctx.lineTo(W,ROAD_Y+ROAD_H-1); ctx.stroke();
+  // Lane divider
+  ctx.strokeStyle='#f1c40f'; ctx.lineWidth=2;
+  ctx.setLineDash([28,18]);
+  ctx.lineDashOffset=-(worldX*2%46);
+  ctx.beginPath(); ctx.moveTo(0,ROAD_Y+ROAD_H/2); ctx.lineTo(W,ROAD_Y+ROAD_H/2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Street lights
+  for(const sl of streetLights){
+    const slx=((sl.x-worldX*0.8)%W+W)%W;
+    ctx.strokeStyle='#888'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(slx,ROAD_Y); ctx.lineTo(slx,ROAD_Y-35); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(slx,ROAD_Y-35); ctx.lineTo(slx+18,ROAD_Y-35); ctx.stroke();
+    ctx.save();
+    ctx.shadowColor='rgba(255,230,100,0.8)'; ctx.shadowBlur=15;
+    ctx.fillStyle='#ffe080';
+    ctx.beginPath(); ctx.arc(slx+18,ROAD_Y-35,4,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=0.15; ctx.fillStyle='#ffe080';
+    ctx.beginPath(); ctx.ellipse(slx+18,ROAD_Y-20,18,30,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Ground below road
+  ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,ROAD_Y+ROAD_H,W,H-ROAD_Y-ROAD_H);
+}
+
+function drawSpotlight(){
+  if(heli.spotPower<=0) return;
+  const sx=heli.x, sy=heli.y+30;
+  const reach=200*heli.spotPower;
+  const width=60*heli.spotPower;
+  ctx.save();
+  const sg=ctx.createLinearGradient(sx,sy,sx,sy+reach);
+  sg.addColorStop(0,`rgba(255,255,200,${0.35*heli.spotPower})`);
+  sg.addColorStop(1,'rgba(255,255,200,0)');
+  ctx.fillStyle=sg;
+  ctx.beginPath();
+  ctx.moveTo(sx-6,sy);
+  ctx.lineTo(sx-width,sy+reach);
+  ctx.lineTo(sx+width,sy+reach);
+  ctx.lineTo(sx+6,sy);
+  ctx.closePath();
+  ctx.fill();
+  // Center beam
+  const cg=ctx.createLinearGradient(sx,sy,sx,sy+reach*0.7);
+  cg.addColorStop(0,`rgba(255,255,255,${0.25*heli.spotPower})`);
+  cg.addColorStop(1,'rgba(255,255,255,0)');
+  ctx.fillStyle=cg;
+  ctx.beginPath();
+  ctx.moveTo(sx-3,sy);
+  ctx.lineTo(sx-width*0.3,sy+reach*0.7);
+  ctx.lineTo(sx+width*0.3,sy+reach*0.7);
+  ctx.lineTo(sx+3,sy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawCriminalCar(c){
+  if(c.caught && c.caughtAnim>50) return;
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  if(c.facing<0) ctx.scale(-1,1);
+
+  const scale=c.caught ? Math.max(0,1-c.caughtAnim/80) : 1;
+  ctx.scale(scale,scale);
+
+  const cw=c.w, ch=c.h;
+  const type=c.type;
+
+  // Flash when spotted
+  if(c.flashTimer>0 && Math.floor(c.flashTimer/2)%2===0){
+    ctx.shadowColor='#fff'; ctx.shadowBlur=20;
+  }
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.4)';
+  ctx.beginPath(); ctx.ellipse(4,ch*0.6,cw*0.4,6,0,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // Body
+  ctx.fillStyle=c.color;
+  if(type==='truck'){
+    ctx.beginPath(); ctx.roundRect(-cw/2,-ch/2,cw,ch,4); ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fillRect(-cw/2,-ch/2,cw*0.3,ch);
+  } else if(type==='sports'){
+    ctx.beginPath();
+    ctx.moveTo(-cw/2,ch/2);
+    ctx.lineTo(-cw/2,-ch*0.1);
+    ctx.quadraticCurveTo(-cw*0.3,-ch/2,0,-ch*0.55);
+    ctx.quadraticCurveTo(cw*0.2,-ch/2,cw/2,-ch*0.1);
+    ctx.lineTo(cw/2,ch/2);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.roundRect(-cw/2,-ch/2,cw,ch,5); ctx.fill();
+    // Roof
+    ctx.fillStyle=shadeCol(c.color,-30);
+    ctx.beginPath(); ctx.roundRect(-cw*0.25,-ch/2,cw*0.55,ch*0.6,4); ctx.fill();
+  }
+
+  // Windows
+  ctx.fillStyle='rgba(150,220,255,0.7)';
+  if(type==='truck'){
+    ctx.fillRect(-cw*0.45,-ch*0.35,cw*0.22,ch*0.35);
+  } else {
+    ctx.fillRect(-cw*0.18,-ch*0.44,cw*0.16,ch*0.3);
+    ctx.fillRect(cw*0.04,-ch*0.44,cw*0.16,ch*0.3);
+  }
+
+  // Headlights (facing direction)
+  ctx.fillStyle='#fffaaa';
+  ctx.shadowColor='#ffe060'; ctx.shadowBlur=8;
+  ctx.fillRect(cw/2-5,-ch*0.25,5,ch*0.18);
+  ctx.fillRect(cw/2-5,ch*0.08,5,ch*0.18);
+  ctx.shadowBlur=0;
+  // Tail lights
+  ctx.fillStyle='#ff2222';
+  ctx.fillRect(-cw/2,-ch*0.25,4,ch*0.18);
+  ctx.fillRect(-cw/2,ch*0.08,4,ch*0.18);
+
+  // Wheels
+  const wheelR=ch*0.34;
+  [[-cw*0.3,ch/2],[cw*0.3,ch/2]].forEach(([wx,wy])=>{
+    ctx.fillStyle='#111';
+    ctx.beginPath(); ctx.arc(wx,wy,wheelR,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#666';
+    ctx.beginPath(); ctx.arc(wx,wy,wheelR*0.5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#777'; ctx.lineWidth=1.5;
+    for(let s=0;s<4;s++){
+      const a=s*Math.PI/2+c.wheelAngle;
+      ctx.beginPath();
+      ctx.moveTo(wx,wy);
+      ctx.lineTo(wx+Math.cos(a)*wheelR*0.8,wy+Math.sin(a)*wheelR*0.8);
+      ctx.stroke();
+    }
+  });
+
+  // Catch progress bar
+  if(c.catchTimer>0&&!c.caught){
+    const pct=c.catchTimer/60;
+    ctx.fillStyle='rgba(0,0,0,0.5)';
+    ctx.fillRect(-cw/2,-ch/2-14,cw,8);
+    ctx.fillStyle=`hsl(${120*pct},80%,50%)`;
+    ctx.fillRect(-cw/2,-ch/2-14,cw*pct,8);
+    ctx.fillStyle='#fff'; ctx.font='bold 7px Arial'; ctx.textAlign='center';
+    ctx.fillText('GEFANGEN!', 0,-ch/2-8);
+  }
+
+  // Caught star burst
+  if(c.caught){
+    ctx.font='24px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const stars=['⭐','🌟','✨'];
+    for(let i=0;i<3;i++){
+      const a=i*Math.PI*2/3+c.caughtAnim*0.1;
+      ctx.fillText(stars[i], Math.cos(a)*30, Math.sin(a)*20-20);
+    }
+  }
+
+  ctx.restore();
+}
+
+function shadeCol(hex,amt){
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.max(0,Math.min(255,(n>>16)+amt));
+  const g=Math.max(0,Math.min(255,((n>>8)&0xff)+amt));
+  const b=Math.max(0,Math.min(255,(n&0xff)+amt));
+  return `rgb(${r},${g},${b})`;
+}
+
+function drawHelicopter(){
+  const hx=heli.x, hy=heli.y+heli.wobble;
+  const sirenOn=heli.sirenFlash<15;
+
+  ctx.save();
+  ctx.translate(hx,hy);
+
+  // Down-wash effect (subtle circle on ground)
+  if(hy<ROAD_Y-40){
+    const gwY=ROAD_Y-hy+10;
+    ctx.save();
+    ctx.globalAlpha=0.08;
+    ctx.fillStyle='#adf';
+    ctx.beginPath(); ctx.ellipse(0,gwY,50,15,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Main rotor shadow on body
+  ctx.save();
+  ctx.globalAlpha=0.15;
+  ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(0,-2,50,12,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Main rotor blades
+  ctx.save();
+  ctx.rotate(heli.rotorAngle);
+  ctx.strokeStyle='rgba(180,220,255,0.85)';
+  ctx.lineWidth=4; ctx.lineCap='round';
+  for(let i=0;i<3;i++){
+    const a=i*Math.PI*2/3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a+Math.PI)*4,Math.sin(a+Math.PI)*4);
+    ctx.lineTo(Math.cos(a)*56,Math.sin(a)*56);
+    ctx.stroke();
+  }
+  // Rotor hub
+  ctx.fillStyle='#bbb';
+  ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Body
+  ctx.fillStyle='#1a5276';
+  ctx.beginPath();
+  ctx.ellipse(0,14,38,18,0,0,Math.PI*2); ctx.fill();
+  // Nose
+  ctx.fillStyle='#1a5276';
+  ctx.beginPath();
+  ctx.moveTo(38,14);
+  ctx.quadraticCurveTo(56,14,58,16);
+  ctx.lineTo(58,20);
+  ctx.quadraticCurveTo(50,22,38,22);
+  ctx.closePath(); ctx.fill();
+
+  // Cockpit glass
+  const cg2=ctx.createLinearGradient(-10,4,10,22);
+  cg2.addColorStop(0,'rgba(130,210,255,0.9)');
+  cg2.addColorStop(1,'rgba(60,140,200,0.7)');
+  ctx.fillStyle=cg2;
+  ctx.beginPath(); ctx.ellipse(12,14,22,12,0,0,Math.PI*2); ctx.fill();
+  // Glass shine
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.beginPath(); ctx.ellipse(6,10,8,5,-0.3,0,Math.PI*2); ctx.fill();
+
+  // POLIZEI stripe
+  ctx.fillStyle='rgba(255,255,255,0.9)';
+  ctx.fillRect(-36,18,74,4);
+  ctx.fillStyle='#1a5276';
+  ctx.font='bold 7px Arial'; ctx.textAlign='center';
+  ctx.fillText('POLIZEI',0,25);
+
+  // Siren lights (top)
+  ctx.save();
+  ctx.shadowBlur=sirenOn?18:4;
+  ctx.shadowColor=sirenOn?'#e74c3c':'#3498db';
+  ctx.fillStyle=sirenOn?'#e74c3c':'#3498db';
+  ctx.fillRect(-14,4,12,7);
+  ctx.shadowColor=sirenOn?'#3498db':'#e74c3c';
+  ctx.fillStyle=sirenOn?'#3498db':'#e74c3c';
+  ctx.fillRect(2,4,12,7);
+  ctx.restore();
+
+  // Spotlight lamp (bottom)
+  ctx.fillStyle='#ddd';
+  ctx.beginPath(); ctx.arc(0,30,7,0,Math.PI*2); ctx.fill();
+  if(heli.spotPower>0){
+    ctx.save();
+    ctx.shadowColor='#ffffc0'; ctx.shadowBlur=20*heli.spotPower;
+    ctx.fillStyle=`rgba(255,255,180,${heli.spotPower*0.9})`;
+    ctx.beginPath(); ctx.arc(0,30,6,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Tail boom
+  ctx.fillStyle='#154360';
+  ctx.beginPath();
+  ctx.moveTo(-38,12);
+  ctx.lineTo(-76,10);
+  ctx.lineTo(-76,18);
+  ctx.lineTo(-38,22);
+  ctx.closePath(); ctx.fill();
+
+  // Tail rotor
+  ctx.save();
+  ctx.translate(-76,14);
+  ctx.rotate(heli.rotorAngle*1.5);
+  ctx.strokeStyle='rgba(180,220,255,0.7)'; ctx.lineWidth=3;
+  for(let i=0;i<2;i++){
+    const a=i*Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*2,Math.sin(a)*2);
+    ctx.lineTo(Math.cos(a)*18,Math.sin(a)*18);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Skids
+  ctx.strokeStyle='#2c3e50'; ctx.lineWidth=3;
+  [[-15,34],[15,34]].forEach(([sx,sy])=>{
+    ctx.beginPath(); ctx.moveTo(sx-4,sy-4); ctx.lineTo(sx,sy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx-18,sy); ctx.lineTo(sx+18,sy); ctx.stroke();
+  });
+
+  // Navigation lights
+  ctx.fillStyle=sirenOn?'#ff4444':'#aa2222';
+  ctx.beginPath(); ctx.arc(-38,15,3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#44ff44';
+  ctx.beginPath(); ctx.arc(38,15,3,0,Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawParticles(){
+  ctx.save();
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawPopups(){
+  ctx.save();
+  for(const p of popups){
+    ctx.globalAlpha=Math.max(0,p.life);
+    ctx.font='bold 20px Comic Sans MS,Arial';
+    ctx.textAlign='center';
+    ctx.strokeStyle='#000'; ctx.lineWidth=3;
+    ctx.strokeText(p.text,p.x,p.y);
+    ctx.fillStyle=p.color; ctx.fillText(p.text,p.x,p.y);
+  }
+  ctx.restore();
+}
+
+function drawHUD2(){
+  // Minimap-style criminal tracker
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,30,0.7)';
+  ctx.beginPath(); ctx.roundRect(8,8,120,22,6); ctx.fill();
+  ctx.strokeStyle='#3498db'; ctx.lineWidth=1;
+  ctx.stroke();
+  criminals.forEach((c,i)=>{
+    if(c.caught){
+      ctx.fillStyle='#2ecc71'; ctx.font='10px serif';
+      ctx.fillText('✅',14+i*18,22);
+    } else {
+      ctx.fillStyle='#e74c3c'; ctx.font='10px serif';
+      ctx.fillText('🚗',14+i*18,22);
+    }
+  });
+  ctx.restore();
+
+  // Spotlight hint
+  if(!heli.spotlight && criminals.some(c=>!c.caught)){
+    const pulse=0.5+Math.sin(frameN*0.1)*0.5;
+    ctx.save();
+    ctx.globalAlpha=pulse;
+    ctx.fillStyle='#fff'; ctx.font='bold 13px Comic Sans MS';
+    ctx.textAlign='center';
+    ctx.fillText('SPACE gedrückt halten = Scheinwerfer 🔦',W/2,H-18);
+    ctx.restore();
+  }
+}
+
+function render(){
+  ctx.clearRect(0,0,W,H);
+  drawNightCity();
+  drawSpotlight();
+
+  for(const c of criminals) drawCriminalCar(c);
+
+  drawParticles();
+  drawHelicopter();
+  drawPopups();
+  drawHUD2();
+}
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').addEventListener('click',startGame);
+init();
+loop();
+</script>
+</body>
+</html>
