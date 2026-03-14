@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schulranzen Ranking – Step by Step Giant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #fff;
+    }
+
+    header {
+      text-align: center;
+      padding: 2rem 1rem 1rem;
+    }
+
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    header p {
+      color: #a0b4d0;
+      margin-top: 0.4rem;
+      font-size: 0.95rem;
+    }
+
+    .progress-bar-wrap {
+      max-width: 500px;
+      margin: 1rem auto 0;
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4ade80, #22d3ee);
+      border-radius: 20px;
+      transition: width 0.4s ease;
+    }
+
+    .progress-label {
+      text-align: center;
+      font-size: 0.82rem;
+      color: #a0b4d0;
+      margin-top: 0.4rem;
+    }
+
+    /* === VOTING SCREEN === */
+    #vote-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem;
+    }
+
+    .question {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      color: #e2e8f0;
+    }
+
+    .candidates {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      width: 100%;
+      max-width: 860px;
+    }
+
+    .card {
+      flex: 1 1 300px;
+      max-width: 380px;
+      background: rgba(255,255,255,0.08);
+      border: 2px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+      position: relative;
+    }
+
+    .card:hover {
+      transform: translateY(-6px) scale(1.02);
+      border-color: #4ade80;
+      box-shadow: 0 12px 40px rgba(74, 222, 128, 0.25);
+    }
+
+    .card:active {
+      transform: scale(0.97);
+    }
+
+    .card.winner {
+      animation: winPulse 0.5s ease;
+      border-color: #4ade80;
+      box-shadow: 0 0 40px rgba(74,222,128,0.5);
+    }
+
+    .card.loser {
+      opacity: 0.4;
+      transform: scale(0.96);
+    }
+
+    @keyframes winPulse {
+      0%   { box-shadow: 0 0 0 rgba(74,222,128,0); }
+      50%  { box-shadow: 0 0 60px rgba(74,222,128,0.7); }
+      100% { box-shadow: 0 0 40px rgba(74,222,128,0.5); }
+    }
+
+    .card-img {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: contain;
+      background: rgba(255,255,255,0.05);
+      padding: 1rem;
+    }
+
+    .card-img.placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 5rem;
+    }
+
+    .card-body {
+      padding: 1rem 1.2rem 1.2rem;
+    }
+
+    .card-name {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .card-elo {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-top: 0.2rem;
+    }
+
+    .vs-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      flex-shrink: 0;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      border-radius: 50%;
+      font-weight: 900;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      align-self: center;
+    }
+
+    /* === RANKING SCREEN === */
+    #ranking-screen {
+      display: none;
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    #ranking-screen h2 {
+      text-align: center;
+      font-size: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .ranking-list {
+      list-style: none;
+    }
+
+    .ranking-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      background: rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 0.8rem 1.2rem;
+      margin-bottom: 0.6rem;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.2s;
+    }
+
+    .ranking-item:hover { transform: translateX(4px); }
+
+    .rank-pos {
+      font-size: 1.3rem;
+      font-weight: 900;
+      min-width: 2.2rem;
+      text-align: center;
+    }
+
+    .rank-pos.gold   { color: #fbbf24; }
+    .rank-pos.silver { color: #94a3b8; }
+    .rank-pos.bronze { color: #cd7c3f; }
+
+    .rank-img {
+      width: 56px;
+      height: 56px;
+      object-fit: contain;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      padding: 4px;
+      flex-shrink: 0;
+    }
+
+    .rank-img.placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+    }
+
+    .rank-info { flex: 1; }
+
+    .rank-name {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .rank-stats {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-top: 0.15rem;
+    }
+
+    .rank-elo-bar-wrap {
+      width: 100px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 20px;
+      height: 6px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .rank-elo-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #4ade80, #22d3ee);
+      border-radius: 20px;
+    }
+
+    .rank-elo-value {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #4ade80;
+      min-width: 3.2rem;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* === BUTTONS === */
+    .btn-row {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+    }
+
+    .btn {
+      padding: 0.75rem 1.8rem;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      color: #0f172a;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .btn-danger {
+      background: rgba(239,68,68,0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+
+    /* === TABS === */
+    .tab-bar {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin: 0 1rem 0;
+    }
+
+    .tab {
+      padding: 0.55rem 1.4rem;
+      border-radius: 30px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      background: linear-gradient(135deg, #4ade80, #22d3ee);
+      color: #0f172a;
+      border-color: transparent;
+    }
+
+    /* === EDIT MODAL === */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: #1e293b;
+      border-radius: 20px;
+      padding: 2rem;
+      max-width: 480px;
+      width: 100%;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .modal h3 {
+      font-size: 1.2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .field {
+      margin-bottom: 1.2rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 0.4rem;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 0.65rem 0.9rem;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 0.9rem;
+    }
+
+    .field input:focus {
+      outline: none;
+      border-color: #4ade80;
+    }
+
+    .field input::placeholder { color: #64748b; }
+
+    /* === MATCH COUNTER === */
+    .match-count {
+      text-align: center;
+      color: #a0b4d0;
+      font-size: 0.85rem;
+      margin-top: 1.2rem;
+    }
+
+    @media (max-width: 600px) {
+      .candidates { gap: 0.8rem; }
+      .card { max-width: 100%; }
+      .vs-badge { width: 38px; height: 38px; font-size: 0.75rem; align-self: center; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎒 Schulranzen Ranking</h1>
+  <p>Step by Step Giant – Wähle deinen Favoriten!</p>
+  <div class="progress-bar-wrap">
+    <div class="progress-bar" id="progressBar" style="width:0%"></div>
+  </div>
+  <div class="progress-label" id="progressLabel">0 Vergleiche</div>
+</header>
+
+<div class="tab-bar" style="margin-top:1rem;">
+  <button class="tab active" id="tabVote" onclick="showTab('vote')">⚔️ Vergleich</button>
+  <button class="tab" id="tabRanking" onclick="showTab('ranking')">🏆 Ranking</button>
+  <button class="tab" id="tabEdit" onclick="openEditModal()">✏️ Bearbeiten</button>
+</div>
+
+<!-- VOTE SCREEN -->
+<div id="vote-screen">
+  <p class="question" id="voteQuestion">Welchen Schulranzen findest du besser?</p>
+  <div class="candidates" id="candidates"></div>
+  <div class="match-count" id="matchCount"></div>
+</div>
+
+<!-- RANKING SCREEN -->
+<div id="ranking-screen">
+  <h2>🏆 Aktuelles Ranking</h2>
+  <ul class="ranking-list" id="rankingList"></ul>
+  <div class="btn-row">
+    <button class="btn btn-primary" onclick="showTab('vote')">⚔️ Weiter vergleichen</button>
+    <button class="btn btn-danger" onclick="confirmReset()">🗑️ Alles zurücksetzen</button>
+  </div>
+</div>
+
+<!-- EDIT MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h3>✏️ Schulranzen bearbeiten</h3>
+    <div id="editList"></div>
+    <div class="btn-row" style="margin-top:1.5rem;">
+      <button class="btn btn-primary" onclick="saveEdits()">Speichern</button>
+      <button class="btn btn-secondary" onclick="closeEditModal()">Abbrechen</button>
+      <button class="btn btn-danger" onclick="addNewBag()">+ Neuer Ranzen</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// =============================================
+//  DATA – Step by Step Giant Designs 2025
+// =============================================
+const DEFAULT_BAGS = [
+  { id: 1,  name: "Mermaid Delia",       emoji: "🧜", color: "#0ea5e9", img: "" },
+  { id: 2,  name: "Tractor Freddy",      emoji: "🚜", color: "#22c55e", img: "" },
+  { id: 3,  name: "Dog Basty",           emoji: "🐶", color: "#f97316", img: "" },
+  { id: 4,  name: "Star Stella",         emoji: "⭐", color: "#a855f7", img: "" },
+  { id: 5,  name: "Lovely Unicorn Nuala",emoji: "🦄", color: "#ec4899", img: "" },
+  { id: 6,  name: "Danger Cat Chiko",    emoji: "🐱", color: "#ef4444", img: "" },
+  { id: 7,  name: "Dino Torex",          emoji: "🦖", color: "#84cc16", img: "" },
+  { id: 8,  name: "Starship Galactus",   emoji: "🚀", color: "#3b82f6", img: "" },
+  { id: 9,  name: "Butterfly Maja",      emoji: "🦋", color: "#f472b6", img: "" },
+  { id: 10, name: "Dragon Drako",        emoji: "🐉", color: "#dc2626", img: "" },
+  { id: 11, name: "Wild Horse Nora",     emoji: "🐴", color: "#92400e", img: "" },
+  { id: 12, name: "Ninja Kimo",          emoji: "🥷", color: "#334155", img: "" },
+];
+
+const ELO_K = 32;
+const STORAGE_KEY = "schulranzen_ranking_v1";
+
+// =============================================
+//  STATE
+// =============================================
+let state = loadState();
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return initState();
+}
+
+function initState() {
+  const bags = DEFAULT_BAGS.map(b => ({
+    ...b, elo: 1000, wins: 0, losses: 0, matches: 0
+  }));
+  return { bags, totalMatches: 0, history: [] };
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+// =============================================
+//  ELO
+// =============================================
+function expectedScore(ratingA, ratingB) {
+  return 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+}
+
+function updateElo(winnerId, loserId) {
+  const winner = state.bags.find(b => b.id === winnerId);
+  const loser  = state.bags.find(b => b.id === loserId);
+
+  const expW = expectedScore(winner.elo, loser.elo);
+  const expL = expectedScore(loser.elo, winner.elo);
+
+  winner.elo = Math.round(winner.elo + ELO_K * (1 - expW));
+  loser.elo  = Math.round(loser.elo  + ELO_K * (0 - expL));
+
+  winner.wins++;   winner.matches++;
+  loser.losses++;  loser.matches++;
+  state.totalMatches++;
+  state.history.push({ winner: winnerId, loser: loserId, ts: Date.now() });
+
+  saveState();
+}
+
+// =============================================
+//  PAIR SELECTION (pick least-compared pair)
+// =============================================
+function pickPair() {
+  const bags = state.bags;
+  if (bags.length < 2) return [bags[0], bags[1]];
+
+  // Build all pairs sorted by total matches (ascending) to ensure fair coverage
+  let pairs = [];
+  for (let i = 0; i < bags.length; i++) {
+    for (let j = i + 1; j < bags.length; j++) {
+      const pairMatches = state.history.filter(
+        h => (h.winner === bags[i].id && h.loser === bags[j].id) ||
+             (h.winner === bags[j].id && h.loser === bags[i].id)
+      ).length;
+      pairs.push({ a: bags[i], b: bags[j], pairMatches });
+    }
+  }
+  pairs.sort((x, y) => x.pairMatches - y.pairMatches);
+
+  // Pick randomly from the least-seen bucket
+  const minMatches = pairs[0].pairMatches;
+  const leastSeen = pairs.filter(p => p.pairMatches === minMatches);
+  const pick = leastSeen[Math.floor(Math.random() * leastSeen.length)];
+
+  // Random order left/right
+  return Math.random() < 0.5 ? [pick.a, pick.b] : [pick.b, pick.a];
+}
+
+// =============================================
+//  RENDER – VOTE
+// =============================================
+let currentPair = null;
+
+function renderVote() {
+  currentPair = pickPair();
+  const [a, b] = currentPair;
+  const container = document.getElementById('candidates');
+
+  container.innerHTML = `
+    ${cardHTML(a)}
+    <div class="vs-badge">VS</div>
+    ${cardHTML(b)}
+  `;
+
+  container.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', () => vote(parseInt(card.dataset.id)));
+  });
+
+  updateProgress();
+}
+
+function cardHTML(bag) {
+  const imgContent = bag.img
+    ? `<img class="card-img" src="${escHtml(bag.img)}" alt="${escHtml(bag.name)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    : '';
+  const placeholder = `<div class="card-img placeholder" style="background:${bag.color}22;${bag.img?'display:none':'display:flex'}">${bag.emoji}</div>`;
+  return `
+    <div class="card" data-id="${bag.id}" role="button" tabindex="0">
+      ${imgContent}
+      ${placeholder}
+      <div class="card-body">
+        <div class="card-name">${escHtml(bag.name)}</div>
+        <div class="card-elo">ELO: ${bag.elo} &nbsp;·&nbsp; ${bag.wins}W / ${bag.losses}L</div>
+      </div>
+    </div>`;
+}
+
+function vote(winnerId) {
+  if (!currentPair) return;
+  const loserId = currentPair.find(b => b.id !== winnerId).id;
+
+  // Animate
+  document.querySelectorAll('.card').forEach(card => {
+    const id = parseInt(card.dataset.id);
+    card.classList.add(id === winnerId ? 'winner' : 'loser');
+    card.style.pointerEvents = 'none';
+  });
+
+  setTimeout(() => {
+    updateElo(winnerId, loserId);
+    renderVote();
+  }, 480);
+}
+
+// =============================================
+//  RENDER – RANKING
+// =============================================
+function renderRanking() {
+  const sorted = [...state.bags].sort((a, b) => b.elo - a.elo);
+  const maxElo = sorted[0]?.elo || 1200;
+  const minElo = sorted[sorted.length-1]?.elo || 800;
+
+  const list = document.getElementById('rankingList');
+  list.innerHTML = sorted.map((bag, i) => {
+    const rank = i + 1;
+    const posClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+    const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    const barWidth = maxElo === minElo ? 50
+      : Math.round(((bag.elo - minElo) / (maxElo - minElo)) * 100);
+
+    const imgContent = bag.img
+      ? `<img class="rank-img" src="${escHtml(bag.img)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const placeholder = `<div class="rank-img placeholder" style="background:${bag.color}33;${bag.img?'display:none':'display:flex'}">${bag.emoji}</div>`;
+
+    return `
+      <li class="ranking-item">
+        <span class="rank-pos ${posClass}">${medal}</span>
+        ${imgContent}${placeholder}
+        <div class="rank-info">
+          <div class="rank-name">${escHtml(bag.name)}</div>
+          <div class="rank-stats">${bag.wins}W · ${bag.losses}L · ${bag.matches} Vergleiche</div>
+        </div>
+        <div class="rank-elo-bar-wrap">
+          <div class="rank-elo-bar" style="width:${barWidth}%"></div>
+        </div>
+        <span class="rank-elo-value">${bag.elo}</span>
+      </li>`;
+  }).join('');
+}
+
+// =============================================
+//  PROGRESS
+// =============================================
+function updateProgress() {
+  const total = state.totalMatches;
+  // Progress towards "enough comparisons" – rough guide: n*(n-1)/2 comparisons for full coverage
+  const n = state.bags.length;
+  const full = (n * (n - 1)) / 2;
+  const pct = Math.min(100, Math.round((total / (full * 2)) * 100));
+  document.getElementById('progressBar').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent =
+    `${total} Vergleich${total !== 1 ? 'e' : ''} – ${pct}% Abdeckung`;
+  document.getElementById('matchCount').textContent =
+    total < 10
+      ? 'Noch ein paar Vergleiche für ein aussagekräftiges Ranking!'
+      : total < 30
+      ? 'Gutes Ranking entsteht – weiter so!'
+      : 'Ranking ist aussagekräftig 🎉';
+}
+
+// =============================================
+//  TABS
+// =============================================
+function showTab(tab) {
+  document.getElementById('vote-screen').style.display = tab === 'vote' ? 'flex' : 'none';
+  document.getElementById('ranking-screen').style.display = tab === 'ranking' ? 'block' : 'none';
+  document.getElementById('tabVote').classList.toggle('active', tab === 'vote');
+  document.getElementById('tabRanking').classList.toggle('active', tab === 'ranking');
+  if (tab === 'ranking') renderRanking();
+  if (tab === 'vote') renderVote();
+}
+
+// =============================================
+//  EDIT MODAL
+// =============================================
+function openEditModal() {
+  const list = document.getElementById('editList');
+  list.innerHTML = state.bags.map(bag => `
+    <div class="field" id="edit_${bag.id}" style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:0.8rem;margin-bottom:0.8rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;">
+        <strong style="font-size:0.9rem;">${bag.emoji} ${escHtml(bag.name)}</strong>
+        <button onclick="deleteBag(${bag.id})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:1.1rem;" title="Löschen">🗑️</button>
+      </div>
+      <label>Bild-URL (optional)</label>
+      <input type="url" id="img_${bag.id}" value="${escHtml(bag.img || '')}" placeholder="https://... (Bild-URL des Schulranzens)">
+    </div>
+  `).join('');
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('open');
+}
+
+function saveEdits() {
+  state.bags.forEach(bag => {
+    const input = document.getElementById('img_' + bag.id);
+    if (input) bag.img = input.value.trim();
+  });
+  saveState();
+  closeEditModal();
+  renderVote();
+}
+
+function deleteBag(id) {
+  if (state.bags.length <= 2) { alert('Mindestens 2 Schulranzen erforderlich!'); return; }
+  state.bags = state.bags.filter(b => b.id !== id);
+  state.history = state.history.filter(h => h.winner !== id && h.loser !== id);
+  saveState();
+  openEditModal();
+}
+
+function addNewBag() {
+  const name = prompt('Name des neuen Schulranzens:');
+  if (!name) return;
+  const newId = Math.max(...state.bags.map(b => b.id)) + 1;
+  state.bags.push({
+    id: newId, name: name.trim(), emoji: '🎒', color: '#6366f1',
+    img: '', elo: 1000, wins: 0, losses: 0, matches: 0
+  });
+  saveState();
+  openEditModal();
+}
+
+// =============================================
+//  RESET
+// =============================================
+function confirmReset() {
+  if (confirm('Wirklich alles zurücksetzen? Das Ranking geht verloren.')) {
+    state = initState();
+    saveState();
+    showTab('vote');
+  }
+}
+
+// =============================================
+//  UTILS
+// =============================================
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// =============================================
+//  INIT
+// =============================================
+showTab('vote');
+</script>
+</body>
+</html>
