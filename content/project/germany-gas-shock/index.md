@@ -3,8 +3,8 @@ title: "The Cost of the Gas Price Shock: A Synthetic Control Study for Germany"
 summary: >
   Using the synthetic control method (Born et al., 2019), I estimate that
   Russia's invasion of Ukraine and the ensuing gas price shock reduced German
-  GDP per capita by approximately 2.7% in 2022 and 4.1% in 2023 relative to a
-  data-driven counterfactual.
+  GDP per capita by approximately 3.6% in 2022 and 4.3% in 2023 relative to a
+  data-driven counterfactual — roughly twice the GDP loss attributed to Brexit.
 tags:
   - Economics
   - Econometrics
@@ -70,23 +70,24 @@ The algorithm assigned positive weights to seven donor countries:
 
 | Country | Weight |
 |---------|--------|
-| Switzerland | 40.2% |
-| Japan | 19.5% |
-| United Kingdom | 18.4% |
-| Portugal | 8.6% |
-| Denmark | 6.8% |
-| Luxembourg | 5.8% |
-| Austria | 0.8% |
+| Switzerland | 39.5% |
+| Canada | 30.2% |
+| Sweden | 11.9% |
+| Poland | 9.5% |
+| Iceland | 3.7% |
+| France | 2.6% |
+| Portugal | 2.5% |
 
 ![Donor weights](/germany-gas-shock/donor_weights.png)
 
-Switzerland, Japan, and the UK anchor synthetic Germany because their
-pre-treatment growth trajectories closely mirror Germany's moderate, steady
-path — avoiding both the rapid convergence of Eastern Europe and the
-debt-crisis contractions of Southern Europe.
+Switzerland and Canada dominate the synthetic control because they share
+Germany's long-run growth trajectory — steady, industrialised, export-oriented
+economies — while avoiding both the rapid convergence dynamics of Eastern
+Europe and the debt-crisis contractions of Southern Europe. Sweden contributes
+as a similarly large, open European manufacturing economy.
 
-**Pre-treatment fit:** Root-mean-square prediction error (RMSPE) = **1.12
-index points** over 2000–2021, indicating a good match.
+**Pre-treatment fit:** Root-mean-square prediction error (RMSPE) = **1.09
+index points** over 2000–2021, indicating a good pre-treatment match.
 
 ### Main Finding
 
@@ -99,13 +100,13 @@ The two lines track closely through 2021. After the invasion, Germany diverges
 
 | Year | Actual Germany | Synthetic Germany | Gap |
 |------|---------------|-------------------|-----|
-| 2022 | 101.8 | 104.5 | **−2.74 pp** |
-| 2023 | 99.5  | 103.6 | **−4.10 pp** |
+| 2022 | 99.5 | 103.1 | **−3.59 pp** |
+| 2023 | 100.6 | 104.9 | **−4.32 pp** |
 
 The estimates suggest:
-- **2022:** −2.7% of 2019 GDP per capita relative to the counterfactual.
-- **2023:** −4.1% of 2019 GDP per capita, as the shock fed through with a lag.
-- **Average 2022–2023:** −3.4 percentage points.
+- **2022:** −3.6% of 2019 GDP per capita relative to the counterfactual.
+- **2023:** −4.3% of 2019 GDP per capita, as the shock continued to feed through.
+- **Average 2022–2023:** −4.0 percentage points.
 
 These estimates are **conservative**: several European donors in the pool
 (Austria, Czech Republic, Finland) were themselves exposed to the Russian gas
@@ -121,11 +122,14 @@ To assess statistical significance, we repeat the analysis for each of the
 
 Germany's gap stands out in the post-treatment period. The **permutation
 p-value** — the share of units whose post/pre RMSPE ratio equals or exceeds
-Germany's ratio of 3.1 — is **p = 0.21**. With only two post-treatment years,
-the maximum achievable significance (minimum possible p-value) is 1/29 ≈ 0.03.
-The result is not significant at conventional 5% thresholds but is suggestive
-of a real effect, consistent with the short post-treatment window and the
-contamination of the donor pool discussed above.
+Germany's ratio of 3.66 — is **p = 0.34**. With only two post-treatment years,
+the minimum possible p-value is 1/29 ≈ 0.03. The result does not reach
+conventional 5% significance, for two reasons: (i) the post-treatment window
+is very short, limiting power; (ii) the donor pool contains countries that were
+themselves partially exposed to the European gas shock (Norway, Sweden, Finland),
+inflating some placebo ratios and raising the permutation p-value. Restricting
+the donor pool to geographically distant economies (USA, Canada, Australia,
+Japan, Korea) would sharpen inference — a natural robustness extension.
 
 ---
 
@@ -137,7 +141,7 @@ contamination of the donor pool discussed above.
 | **Outcome** | Quarterly real GDP | Annual real GDP per capita |
 | **Donor pool** | 23 OECD countries | 28 OECD countries |
 | **Pre-treatment period** | 1995 Q1 – 2016 Q2 | 2000 – 2021 |
-| **Estimated GDP loss** | 1.7%–2.5% by end 2018 | 2.7%–4.1% by end 2023 |
+| **Estimated GDP loss** | 1.7%–2.5% by end 2018 | 3.6%–4.3% by end 2023 |
 | **Mechanism** | Downgraded growth expectations | Energy cost shock + industrial contraction |
 
 Germany's estimated loss is **larger** than the Brexit cost to the UK and was
