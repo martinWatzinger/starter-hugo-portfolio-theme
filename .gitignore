@@ -5,3 +5,7 @@
 resources/
 public/
 assets/jsconfig.json
+
+# Python
+__pycache__/
+*.pyc
