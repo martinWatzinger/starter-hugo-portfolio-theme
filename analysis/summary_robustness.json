@@ -1,0 +1,26 @@
+{
+  "donor_pool": [
+    "USA",
+    "CAN",
+    "JPN",
+    "KOR",
+    "AUS",
+    "NZL"
+  ],
+  "pre_rmspe": 1.4168,
+  "post_rmspe": 4.2944,
+  "ratio": 3.03,
+  "p_value": 0.429,
+  "n_placebos": 6,
+  "avg_gap_post": -4.29,
+  "gaps": {
+    "2022": -4.09,
+    "2023": -4.49
+  },
+  "weights": {
+    "CAN": 0.6344,
+    "USA": 0.1842,
+    "KOR": 0.1256,
+    "JPN": 0.0557
+  }
+}
