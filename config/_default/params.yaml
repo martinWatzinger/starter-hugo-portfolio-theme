@@ -1,10 +1,7 @@
 # SITE SETUP
-# Guide: https://wowchemy.com/docs/getting-started/
-# Documentation: https://wowchemy.com/docs/
-# This file is formatted using YAML syntax - learn more at https://learnxinyminutes.com/docs/yaml/
+# Rotary Club Münster-Westfalen
 
 # Appearance
-
 appearance:
   theme_day: custom
   theme_night: custom
@@ -12,14 +9,13 @@ appearance:
   font_size: L
 
 # SEO
-
 marketing:
   seo:
-    site_type: Person
+    site_type: Organization
     local_business_type: ''
-    org_name: ''
-    description: 'A highly-customizable Hugo blog theme powered by Wowchemy website builder.'
-    twitter: 'wowchemy'
+    org_name: 'Rotary Club Münster-Westfalen'
+    description: 'Rotary Club Münster-Westfalen – Menschen, die helfen. Seit 2010 engagieren wir uns für eine bessere Welt in Münster und darüber hinaus.'
+    twitter: ''
   analytics:
     google_analytics: ''
     baidu_tongji: ''
@@ -28,7 +24,6 @@ marketing:
     baidu: ''
 
 # Site header
-
 header:
   navbar:
     enable: true
@@ -36,38 +31,30 @@ header:
     show_logo: false
     show_language: false
     show_day_night: true
-    show_search: true
-    highlight_active_link: false
+    show_search: false
+    highlight_active_link: true
 
 footer:
   copyright:
-    notice: '© {year} Me. This work is licensed under {license}'
+    notice: '© {year} Rotary Club Münster-Westfalen | <a href="https://www.rotary.org" target="_blank">Rotary International</a>'
     license:
-      enable: true
-      allow_derivatives: false
-      share_alike: true
-      allow_commercial: false
+      enable: false
 
 # Localization
-
 locale:
-  date_format: 'Jan 2, 2006'
-  time_format: '3:04 PM'
+  date_format: '02. Jan 2006'
+  time_format: '15:04 Uhr'
 
 # Site features
-
 features:
   syntax_highlighter:
-    enable: true
-    extra_languages:
-      - r
-      - latex
+    enable: false
   math:
     enable: false
   privacy_pack:
     enable: false
   repository:
-    url: 'https://github.com/<username>/<repository>'
+    url: 'https://github.com/martinwatzinger/starter-hugo-portfolio-theme'
     content_dir: content
     branch: main
   avatar:
@@ -75,22 +62,11 @@ features:
     shape: circle
   comment:
     provider: ''
-    disqus:
-      shortname: ''
-      show_count: true
-    commento:
-      url: ''
   search:
     provider: ''
-    algolia:
-      app_id: ''
-      api_key: ''
-      index_name: ''
-      show_logo: false
   map:
     provider: ''
-    api_key: ''
-    zoom: 15
+    zoom: 14
 
 extensions:
   cms:

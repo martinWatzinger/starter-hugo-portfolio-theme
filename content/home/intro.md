@@ -1,24 +1,16 @@
 ---
-# Use the Intro widget of the Blog template
 widget: about.avatar
-
-# This file represents a page section.
 headless: true
-
-# Order that this section will appear in.
 weight: 10
-
 author: admin
-#design:
-#  background:
-#    color: '#090a0b'
-#    text_color_light: true
-#    video:
-#      path:  # enter filename of a video in /assets/media
-#  css_class: fullscreen
 ---
 
-👋 Hi, there! I'm **Alice**, a machine learning researcher at Netflix.
-{style="font-size: 1.2rem; background: #FFB76B; background: linear-gradient(to right, #FFB76B 0%, #FFA73D 30%, #FF7C00 60%, #FF7F04 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"}
+## Willkommen beim Rotary Club Münster-Westfalen
+{style="font-size: 1.8rem; color: #17458F; font-weight: 700;"}
 
-Check out my [resumé](/about/) and portfolio below 😍
+**„Service above Self"** – Dienst über das eigene Ich.
+{style="font-size: 1.2rem; color: #F7A81B; font-weight: 600;"}
+
+Wir sind rund 80 Frauen und Männer aus Münster, die sich für eine bessere Welt einsetzen – in unserer Stadt, in Deutschland und weltweit. Als jüngster der fünf Rotary Clubs in Münster, gegründet im Herbst 2010, verbinden wir Berufsleben, Gemeinschaft und gemeinnütziges Engagement.
+
+Unser Jahresmotto 2025/2026: **„Teilhabe gemeinsam erwirken"**

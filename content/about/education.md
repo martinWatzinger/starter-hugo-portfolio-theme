@@ -1,47 +1,54 @@
 ---
-# An instance of the Experience widget.
-# Documentation: https://wowchemy.com/docs/page-builder/
 widget: experience
-
-# This file represents a page section.
 headless: true
-
-# Order that this section appears on the page.
 weight: 30
+title: Rotary-Werte & Grundsätze
+subtitle: Was uns antreibt
 
-title: Education
-subtitle:
-
-# Date format for experience
-#   Refer to https://wowchemy.com/docs/customization/#date-format
 date_format: Jan 2006
 
-# Experiences.
-#   Add/remove as many `experience` items below as you like.
-#   Required fields are `title`, `company`, and `date_start`.
-#   Leave `date_end` empty if it's your current employer.
-#   Begin multi-line descriptions with YAML's `|2-` multi-line prefix.
 experience:
-  - title: MEng Electronic Engineering
-    company: University X
-    company_url: ''
-    company_logo: org-x
-    location: California
-    date_start: '2021-01-01'
-    date_end: '2022-01-01'
+  - title: Service above Self
+    company: Rotary International Leitprinzip
+    company_url: 'https://www.rotary.org'
+    company_logo: ''
+    location: Weltweit
+    date_start: '1905-02-23'
+    date_end: ''
     description: |2-
-        * Dissertation on Y
-        * Basketball team
-        * DJ club
+        Das Herzstück aller Rotary-Aktivitäten:
 
-  - title: BEng Electronic Engineering
-    company: University X
+        * Dienst an der Gemeinschaft vor dem eigenen Vorteil
+        * Humanitäres Engagement ohne Gegenleistung
+        * Handeln nach dem "Vierweg-Test": Ist es wahr? Ist es fair? Fördert es Freundschaft? Nützt es allen?
+
+  - title: Vielfalt & Inklusion
+    company: Rotary Club Münster-Westfalen
     company_url: ''
-    company_logo: org-x
-    location: California
-    date_start: '2016-01-01'
-    date_end: '2020-12-31'
-    description: My dissertation was on X
+    company_logo: ''
+    location: Münster
+    date_start: '2010-10-01'
+    date_end: ''
+    description: |2-
+        Unser Club lebt Vielfalt:
+
+        * Mitglieder aus über 20 verschiedenen Berufsfeldern
+        * Annähernd paritätische Besetzung von Frauen und Männern
+        * Offen für alle, die unsere Werte teilen
+
+  - title: Wöchentliche Treffen
+    company: Restaurant/Clubhaus Münster
+    company_url: ''
+    company_logo: ''
+    location: Münster, Westfalen
+    date_start: '2010-10-01'
+    date_end: ''
+    description: |2-
+        Jede Woche kommen wir zusammen:
+
+        * Gemeinsames Abendessen
+        * Vortrag zu aktuellen Themen aus Gesellschaft, Wissenschaft und Wirtschaft
+        * Austausch und Netzwerken im vertrauensvollen Kreis
 
 design:
   columns: '1'

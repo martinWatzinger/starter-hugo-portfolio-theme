@@ -1,5 +1,5 @@
-// Starter Blog Template
-// https://wowchemy.com/hugo-themes/
+// Rotary Club Münster-Westfalen Theme
+// Farben: Rotary Blau #17458F, Gold #F7A81B
 
 body {
   background-color: rgb(247, 250, 252);
@@ -14,37 +14,90 @@ body {
   background-color: rgb(31, 39, 51);
 }
 
-// custom footer color
+// Rotary-Navbar
+.navbar {
+  box-shadow: 0 2px 8px rgba(23, 69, 143, 0.15) !important;
+  border-bottom: 3px solid #F7A81B;
+}
+
+.navbar-brand {
+  font-weight: 700;
+  color: #fff !important;
+  letter-spacing: 0.5px;
+}
+
+// Footer
 .page-footer {
-  background-color: rgb(247, 250, 252);
+  background-color: #17458F;
+  color: #fff;
+}
+
+.page-footer a {
+  color: #F7A81B;
 }
 
 .dark .page-footer {
-  background-color: rgb(26, 32, 44);
+  background-color: rgb(20, 28, 50);
 }
 
-// more rounded cards and larger gap between cards
+// Hero-Bereich
+.home-section.wg-about-avatar {
+  padding: 3rem 0 2rem;
+  background: linear-gradient(135deg, #17458F 0%, #1a5298 60%, #1f6bb5 100%);
+  color: #fff;
+}
+
+.home-section.wg-about-avatar .portrait-title h2,
+.home-section.wg-about-avatar .portrait-title h3 {
+  color: rgba(255,255,255,0.9);
+}
+
+.home-section.wg-about-avatar p {
+  color: rgba(255,255,255,0.85);
+}
+
+// Gold-Akzent für Überschriften
+h1, h2 {
+  color: #17458F;
+}
+
+// Projekt-Karten
 .card-simple {
   margin-top: 1.8rem;
   border-radius: 15px;
+  border-top: 4px solid #F7A81B;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-simple:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(23, 69, 143, 0.15);
 }
 
 .dark .card-simple {
   background: rgb(31, 39, 51);
 }
 
-// no navbar shadow
-.navbar {
-  box-shadow: none !important; // 'important' to override dark mode box-shadow too.
-}
-
-// custom section padding
+// Abschnitte
 .home-section {
-  padding: 1rem 0;
+  padding: 2rem 0;
 }
 
-.home-section.wg-about-avatar {
-  padding: 0;
+// Abschnitt-Titel mit Gold-Unterstrich
+.section-heading h1 {
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.5rem;
+}
+
+.section-heading h1::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 4px;
+  background: #F7A81B;
+  margin: 0.3rem auto 0;
+  border-radius: 2px;
 }
 
 #profile .network-icon {
@@ -79,39 +132,57 @@ ul.network-icon .big-icon {
   margin-bottom: 1em;
 }
 
-// Narrower container for Hello World sections (primarily Blank widget content).
 @media (min-width: 1200px) {
   .home-section .container {
-    max-width: 880px;
+    max-width: 900px;
   }
 }
 @media (min-width: 992px) {
   .home-section .container {
-    max-width: 880px;
+    max-width: 900px;
   }
 }
 
-// Custom avatar size on homepage
 .avatar {
-  width: auto;
-  height: auto;
-  max-width: 225px;
-  max-height: 225px;
-}
-
-// Prevent stretching on About page with narrow container
-.wg-about .avatar {
   width: auto;
   height: auto;
   max-width: 200px;
   max-height: 200px;
+  border: 4px solid #F7A81B;
+  box-shadow: 0 4px 20px rgba(23,69,143,0.3);
 }
 
-// Smaller Name and Role text on About page than in homepage `about.avatar` widget
+.wg-about .avatar {
+  width: auto;
+  height: auto;
+  max-width: 180px;
+  max-height: 180px;
+}
+
 .wg-about .portrait-title h2 {
   font-size: 1rem;
 }
 
 .wg-about .portrait-title h3 {
   font-size: 0.8rem;
+}
+
+// CTA-Button Rotary-Gold
+.btn-primary {
+  background-color: #F7A81B !important;
+  border-color: #F7A81B !important;
+  color: #17458F !important;
+  font-weight: 700;
+}
+
+.btn-primary:hover {
+  background-color: #e0941a !important;
+  border-color: #e0941a !important;
+}
+
+// Tag-Badges
+.badge-light {
+  background-color: #EEF2F9;
+  color: #17458F;
+  font-weight: 600;
 }

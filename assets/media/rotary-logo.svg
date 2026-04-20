@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#17458F"/>
+
+  <!-- Cogwheel (Rotary gear symbol) -->
+  <g transform="translate(100,100)">
+    <!-- Outer gear teeth -->
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(0)"/>
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(30)"/>
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(60)"/>
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(90)"/>
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(120)"/>
+    <path d="M0,-60 L8,-52 L8,52 L0,60 L-8,52 L-8,-52 Z" fill="#F7A81B" transform="rotate(150)"/>
+    <!-- Outer ring -->
+    <circle cx="0" cy="0" r="50" fill="#17458F" stroke="#F7A81B" stroke-width="6"/>
+    <!-- Inner circle -->
+    <circle cx="0" cy="0" r="25" fill="#17458F" stroke="#F7A81B" stroke-width="3"/>
+  </g>
+
+  <!-- Letter R in center -->
+  <text x="100" y="115" font-family="Arial, sans-serif" font-size="42" font-weight="bold"
+        text-anchor="middle" fill="#ffffff">R</text>
+
+  <!-- Bottom text -->
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="11" font-weight="600"
+        text-anchor="middle" fill="#F7A81B" letter-spacing="2">ROTARY</text>
+</svg>
